@@ -1,0 +1,125 @@
+name: Compilar Forja Infinita para Android
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main", "master"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: forja-infinita-android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  export-android:
+    name: Godot 4.4.1 Android ARM64
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Descargar proyecto
+        uses: actions/checkout@v4
+
+      - name: Preparar Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Instalar Android 35
+        shell: bash
+        run: |
+          sdk_root="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          test -n "$sdk_root"
+          sdkmanager_bin="$sdk_root/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$sdkmanager_bin" ]; then
+            sdkmanager_bin="$(find "$sdk_root/cmdline-tools" -type f -path '*/bin/sdkmanager' 2>/dev/null | sort -V | tail -n 1)"
+          fi
+          test -x "$sdkmanager_bin"
+          echo "ANDROID_SDK_ROOT=$sdk_root" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=$sdk_root" >> "$GITHUB_ENV"
+          yes | "$sdkmanager_bin" --sdk_root="$sdk_root" --licenses >/dev/null || true
+          "$sdkmanager_bin" --sdk_root="$sdk_root" "platform-tools" "build-tools;35.0.0" "platforms;android-35"
+
+      - name: Descargar Godot y plantillas oficiales
+        shell: bash
+        run: |
+          godot_dir="$RUNNER_TEMP/godot"
+          template_dir="$HOME/.local/share/godot/export_templates/4.4.1.stable"
+          mkdir -p "$godot_dir" "$template_dir" "$RUNNER_TEMP/godot-templates"
+          curl -fL --retry 3 -o "$RUNNER_TEMP/godot.zip" \
+            "https://github.com/godotengine/godot/releases/download/4.4.1-stable/Godot_v4.4.1-stable_linux.x86_64.zip"
+          curl -fL --retry 3 -o "$RUNNER_TEMP/templates.tpz" \
+            "https://github.com/godotengine/godot/releases/download/4.4.1-stable/Godot_v4.4.1-stable_export_templates.tpz"
+          unzip -q "$RUNNER_TEMP/godot.zip" -d "$godot_dir"
+          unzip -q "$RUNNER_TEMP/templates.tpz" -d "$RUNNER_TEMP/godot-templates"
+          cp -a "$RUNNER_TEMP/godot-templates/templates/." "$template_dir/"
+          godot_bin="$godot_dir/Godot_v4.4.1-stable_linux.x86_64"
+          chmod +x "$godot_bin"
+          test -x "$godot_bin"
+          test -s "$template_dir/android_debug.apk"
+          echo "GODOT_BIN=$godot_bin" >> "$GITHUB_ENV"
+
+      - name: Crear firma de depuración
+        shell: bash
+        run: |
+          mkdir -p "$HOME/.android"
+          if [ ! -f "$HOME/.android/debug.keystore" ]; then
+            keytool -genkeypair -v \
+              -keystore "$HOME/.android/debug.keystore" \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Android Debug,O=Forja Infinita,C=CL"
+          fi
+
+      - name: Configurar rutas Android en Godot
+        shell: bash
+        run: |
+          sdk_root="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          mkdir -p "$HOME/.config/godot"
+          printf '%s\n' \
+            '[gd_resource type="EditorSettings" format=3]' \
+            '' \
+            '[resource]' \
+            "export/android/android_sdk_path = \"$sdk_root\"" \
+            "export/android/java_sdk_path = \"$JAVA_HOME\"" \
+            "export/android/debug_keystore = \"$HOME/.android/debug.keystore\"" \
+            'export/android/debug_keystore_user = "androiddebugkey"' \
+            'export/android/debug_keystore_pass = "android"' \
+            > "$HOME/.config/godot/editor_settings-4.tres"
+
+      - name: Importar y validar proyecto
+        shell: bash
+        run: "$GODOT_BIN --headless --editor --quit --path \"$GITHUB_WORKSPACE\""
+
+      - name: Probar catálogo, piezas y montaje
+        shell: bash
+        run: "timeout 90s $GODOT_BIN --headless --path \"$GITHUB_WORKSPACE\" -- --smoke-test"
+
+      - name: Exportar APK
+        shell: bash
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/build"
+          "$GODOT_BIN" --headless --path "$GITHUB_WORKSPACE" \
+            --export-debug "Android" "$GITHUB_WORKSPACE/build/ForjaInfinita-debug.apk"
+
+      - name: Comprobar APK
+        shell: bash
+        run: |
+          test -s build/ForjaInfinita-debug.apk
+          sha256sum build/ForjaInfinita-debug.apk > build/ForjaInfinita-debug.apk.sha256
+
+      - name: Publicar APK descargable
+        uses: actions/upload-artifact@v4
+        with:
+          name: ForjaInfinita-Android-debug
+          path: |
+            build/ForjaInfinita-debug.apk
+            build/ForjaInfinita-debug.apk.sha256
+          if-no-files-found: error
+          retention-days: 30
+

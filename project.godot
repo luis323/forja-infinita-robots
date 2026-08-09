@@ -1,0 +1,47 @@
+[application]
+
+config/name="Forja Infinita: Robots"
+config/description="Construye robots imposibles y enfrentalos en combates automaticos"
+run/main_scene="res://scenes/main.tscn"
+config/features=PackedStringArray("4.4", "Mobile")
+config/icon="res://assets/icon.svg"
+boot_splash/bg_color=Color(0.018, 0.027, 0.055, 1)
+boot_splash/show_image=false
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/size/window_width_override=1280
+window/size/window_height_override=720
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+window/handheld/orientation=4
+window/energy_saving/keep_screen_on=true
+
+[input]
+
+ui_accept={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"physical_keycode":32), Object(InputEventKey,"physical_keycode":4194309), Object(InputEventJoypadButton,"button_index":0)]
+}
+ui_cancel={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"physical_keycode":4194305), Object(InputEventJoypadButton,"button_index":1)]
+}
+
+[physics]
+
+common/physics_ticks_per_second=60
+3d/default_gravity=22.0
+
+[rendering]
+
+renderer/rendering_method="mobile"
+renderer/rendering_method.mobile="mobile"
+rendering_device/driver.android="vulkan"
+rendering_device/fallback_to_opengl3=true
+anti_aliasing/quality/use_debanding=true
+textures/vram_compression/import_etc2_astc=true
+environment/defaults/default_clear_color=Color(0.018, 0.027, 0.055, 1)
+
