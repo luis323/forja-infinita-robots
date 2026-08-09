@@ -28,10 +28,18 @@ Construyes un robot sobre un pedestal y después lo ves pelear automáticamente 
 - Cada pieza perdida aplica desventajas reales de potencia, alcance, velocidad de ataque, precisión, movimiento o estabilidad.
 - Herramientas con comportamiento propio: sierras, espadas y tijeras cortan mejor; martillos y palas arrancan primero las armas.
 - Modo Historia con créditos, recompensas por victoria o intento, precios y compras guardadas.
+- Ficha previa de cada rival de Historia con nombre, afinidad, personalidad, las 10 estadísticas reales y análisis porcentual.
+- Asesor IA tras una derrota: prueba cientos de combinaciones y arma la mejor posible usando exclusivamente piezas ya desbloqueadas.
 - Las compras muestran una animación luminosa de desbloqueo y las piezas bloqueadas usan un aviso rojo de alto contraste.
 - En VS local y LAN las 160 piezas están desbloqueadas desde el principio.
-- Combate automático más pesado con persecución, esquivas, embestidas, golpes encadenados, ataques a distancia, críticos, sobrecargas, retroceso y 90 segundos de límite.
-- Animación de hombros, codos, caderas y rodillas, orientación correcta, cámara móvil, grandes ráfagas de chispas, piezas que salen despedidas y sacudida en impactos.
+- Cuatro personalidades de IA: agresiva, táctica, peso pesado y acrobática; cada una se mueve, presiona, esquiva y usa distancias diferentes.
+- La CPU de Historia también decide cuándo activar su herramienta y busca desarmar al jugador.
+- Contacto sincronizado: el daño ocurre en el punto máximo de la animación, cuando el brazo o herramienta alcanza físicamente al rival.
+- Combate automático más pesado con persecución, fintas, esquivas, embestidas, golpes encadenados, ataques a distancia, críticos, sobrecargas, aturdimiento, empujones y 90 segundos de límite.
+- Cada cuarto impacto provoca un empujón más fuerte; blindaje, estabilidad y la postura de peso pesado reducen el efecto.
+- Animación de hombros, codos, caderas y rodillas, inclinación corporal al atacar, orientación correcta y cámara que enfoca temporalmente el lugar del impacto.
+- Desgaste visual progresivo: placas oscurecidas, cables luminosos, postura deteriorada, piezas desprendidas que permanecen en el ring y destellos intermitentes.
+- Grandes ráfagas de chispas nacen exactamente donde chocan los robots, acompañadas por sacudida y reacción corporal.
 - Música de pelea y efectos de interfaz, montaje, pasos, ataques, disparos, impactos y resultados; todo se genera dentro del juego y no depende de archivos externos.
 - Ring 3D con plataforma, esquinas, postes, tres cuerdas por lado, luces y colores de cada equipo.
 - Guardado del nivel CPU, récord, victorias y último robot.

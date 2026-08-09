@@ -27,11 +27,18 @@ var _attack_time := 0.0
 var _attack_duration := 0.42
 var _attack_left := true
 var _attack_heavy := false
+var _damage_level := 0
+var _damage_layer: Node3D
+var _fault_timer := 0.0
+var _base_z := 0.0
 
 func build_robot(build: Dictionary, tint: Color, animate_slot: String = "") -> void:
 	team_tint = tint
 	defeated = false
 	celebrating = false
+	_damage_level = 0
+	_damage_layer = null
+	_fault_timer = 0.0
 	for child in get_children():
 		remove_child(child)
 		child.queue_free()
@@ -94,6 +101,7 @@ func detach_part(slot: String, impulse_direction: Vector3) -> bool:
 		root.queue_free()
 		return true
 	root.reparent(arena_root, true)
+	root.add_to_group("battle_debris")
 	var direction := impulse_direction.normalized()
 	if direction.length() < 0.05:
 		direction = Vector3(1.0, 0.0, 0.0)
@@ -107,7 +115,7 @@ func detach_part(slot: String, impulse_direction: Vector3) -> bool:
 	tween.parallel().tween_property(root, "rotation", spin, 0.55)
 	tween.set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
 	tween.tween_property(root, "global_position", ground_position, 0.62)
-	tween.tween_interval(2.2)
+	tween.tween_interval(8.5)
 	tween.tween_property(root, "scale", Vector3.ZERO, 0.42)
 	tween.tween_callback(root.queue_free)
 	return true
@@ -136,13 +144,45 @@ func play_attack(use_left: bool, heavy: bool = false) -> void:
 	_attack_duration = 0.78 if heavy else 0.50
 	_attack_time = _attack_duration
 
-func play_hit() -> void:
+func play_hit(strong := false) -> void:
 	if defeated:
 		return
+	var original_rotation := rotation
+	var hit_rotation := original_rotation + Vector3(0.0, 0.0, (0.18 if strong else 0.09) * (-1.0 if sin(_time * 5.0) < 0.0 else 1.0))
 	var tween := create_tween()
 	tween.set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
-	tween.tween_property(self, "scale", Vector3(1.12, 0.88, 1.12), 0.065)
-	tween.tween_property(self, "scale", Vector3.ONE, 0.16)
+	tween.tween_property(self, "scale", Vector3(1.16, 0.82, 1.16) if strong else Vector3(1.10, 0.90, 1.10), 0.075)
+	tween.parallel().tween_property(self, "rotation", hit_rotation, 0.075)
+	tween.tween_property(self, "scale", Vector3.ONE, 0.21 if strong else 0.16)
+	tween.parallel().tween_property(self, "rotation", original_rotation, 0.21 if strong else 0.16)
+
+func set_damage_state(level: int) -> void:
+	var safe_level := clampi(level, 0, 3)
+	if safe_level <= _damage_level:
+		return
+	if not is_instance_valid(_damage_layer):
+		_damage_layer = Node3D.new()
+		_damage_layer.name = "MechanicalDamage"
+		add_child(_damage_layer)
+	for stage in range(_damage_level + 1, safe_level + 1):
+		_add_damage_stage(stage)
+	_damage_level = safe_level
+	_fault_timer = 0.18
+
+func _add_damage_stage(stage: int) -> void:
+	var scorch := Color("27232a")
+	match stage:
+		1:
+			_add_shape(_damage_layer, 0, Vector3(0.72, 0.16, 0.08), scorch, false, Vector3(-0.34, 3.03, 0.61), Vector3(0.0, 0.0, -18.0))
+			_add_shape(_damage_layer, 2, Vector3(0.16, 0.16, 0.10), Color("ffad45"), true, Vector3(0.45, 3.35, 0.62))
+		2:
+			_add_shape(_damage_layer, 0, Vector3(0.92, 0.20, 0.09), scorch, false, Vector3(0.30, 2.62, 0.64), Vector3(0.0, 0.0, 24.0))
+			_add_shape(_damage_layer, 1, Vector3(0.07, 0.54, 0.07), Color("64d9ff"), true, Vector3(-1.22, 3.12, 0.08), Vector3(0.0, 0.0, 24.0))
+			_add_shape(_damage_layer, 1, Vector3(0.07, 0.46, 0.07), Color("fff173"), true, Vector3(1.22, 3.08, 0.08), Vector3(0.0, 0.0, -20.0))
+		3:
+			_add_shape(_damage_layer, 0, Vector3(0.76, 0.18, 0.08), scorch, false, Vector3(0.12, 4.23, 0.54), Vector3(0.0, 0.0, -12.0))
+			for x in [-0.42, 0.0, 0.42]:
+				_add_shape(_damage_layer, 2, Vector3(0.12, 0.12, 0.08), Color("ff6b45"), true, Vector3(x, 3.62, 0.66))
 
 func play_victory() -> void:
 	if defeated:
@@ -176,6 +216,7 @@ func _process(delta: float) -> void:
 	if defeated or celebrating:
 		return
 	_attack_time = maxf(0.0, _attack_time - delta)
+	_fault_timer = maxf(0.0, _fault_timer - delta)
 	var gait := sin(_time * 6.8)
 	var walk_amount := 1.0 if moving else 0.0
 	var left_arm_upper: Node3D = motion_joints.get("left_arm_upper")
@@ -190,11 +231,13 @@ func _process(delta: float) -> void:
 	var right_arm_angle := -gait * 0.42 * walk_amount
 	var left_elbow_angle := -0.12 - maxf(0.0, -gait) * 0.25 * walk_amount
 	var right_elbow_angle := -0.12 - maxf(0.0, gait) * 0.25 * walk_amount
+	var attack_lunge := 0.0
 	if _attack_time > 0.0:
 		var progress := 1.0 - _attack_time / _attack_duration
 		var windup := sin(progress * PI)
 		var recoil := sin(progress * TAU) * 0.16
 		var strike_angle := (-1.62 if not _attack_heavy else -2.02) * windup + recoil
+		attack_lunge = windup * (0.62 if _attack_heavy else 0.38)
 		if _attack_left:
 			left_arm_angle = strike_angle
 			left_elbow_angle = -0.72 * windup
@@ -203,6 +246,15 @@ func _process(delta: float) -> void:
 			right_arm_angle = strike_angle
 			right_elbow_angle = -0.72 * windup
 			left_arm_angle *= 0.25
+	if _damage_level >= 2:
+		left_arm_angle += 0.16
+		right_arm_angle -= 0.12
+		left_elbow_angle -= 0.10
+	if _damage_level >= 3:
+		if left_leg_upper:
+			left_leg_upper.rotation.z = 0.07
+		if right_leg_upper:
+			right_leg_upper.rotation.z = -0.05
 	if left_arm_upper:
 		left_arm_upper.rotation.x = lerpf(left_arm_upper.rotation.x, left_arm_angle, minf(1.0, delta * 18.0))
 	if right_arm_upper:
@@ -223,8 +275,12 @@ func _process(delta: float) -> void:
 	var head: Node3D = part_roots.get("head")
 	if torso:
 		torso.rotation.y = gait * 0.055 * walk_amount
+		torso.rotation.z = sin(_time * 1.7) * 0.018 * float(_damage_level)
 	if head:
 		head.rotation.y = -gait * 0.075 * walk_amount + sin(_time * 1.4) * 0.025
+		head.rotation.z = -0.025 * float(_damage_level)
+	if is_instance_valid(_damage_layer) and _damage_level >= 2:
+		_damage_layer.visible = not (_damage_level >= 3 and fmod(_time, 0.72) < 0.08)
 	for side_name in ["left", "right"]:
 		var saw: Node3D = motion_joints.get("%s_weapon_saw" % side_name)
 		if saw:
@@ -239,9 +295,11 @@ func _process(delta: float) -> void:
 	if moving:
 		target_y += abs(gait) * 0.10
 	position.y = lerpf(position.y, target_y, minf(1.0, delta * 12.0))
+	position.z = lerpf(position.z, _base_z + attack_lunge, minf(1.0, delta * 18.0))
 
 func remember_floor_height() -> void:
 	_base_y = position.y
+	_base_z = position.z
 
 func _build_part(slot: String, index: int) -> Node3D:
 	var root := Node3D.new()

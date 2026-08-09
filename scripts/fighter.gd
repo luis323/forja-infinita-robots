@@ -18,6 +18,7 @@ const PART_LABELS := {
 	"left_weapon": "ARMA IZQUIERDA",
 	"right_weapon": "ARMA DERECHA",
 }
+const PERSONALITY_NAMES := ["AGRESIVO", "TÁCTICO", "PESO PESADO", "ACROBÁTICO"]
 
 var fighter_id := 0
 var build := {}
@@ -48,6 +49,15 @@ var _next_manual_left := true
 var detached_parts := {}
 var joint_integrity := {}
 var joint_maximum := {}
+var personality_id := 0
+var personality_name := "AGRESIVO"
+var auto_tool_enabled := false
+var _auto_tool_timer := 4.0
+var _personality_timer := 1.8
+var _personality_actions := 0
+var _stagger_time := 0.0
+var _brace_time := 0.0
+var _received_hits := 0
 
 func setup_robot(new_build: Dictionary, tint: Color, stat_multiplier: float, new_id: int, robot_name: String) -> void:
 	fighter_id = new_id
@@ -77,6 +87,8 @@ func setup_robot(new_build: Dictionary, tint: Color, stat_multiplier: float, new
 	_rng.seed = deterministic_seed
 	think_offset = float(abs(deterministic_seed) % 40) / 100.0
 	_strafe_direction = -1.0 if _rng.randi() % 2 == 0 else 1.0
+	personality_id = _personality_from_stats(stats, deterministic_seed)
+	personality_name = PERSONALITY_NAMES[personality_id]
 	model = RobotModelScript.new()
 	add_child(model)
 	model.build_robot(build, tint)
@@ -99,6 +111,15 @@ func set_opponent(value: ArenaFighter) -> void:
 func set_opponents(values: Array[ArenaFighter]) -> void:
 	opponents = values.duplicate()
 	_choose_target()
+
+static func _personality_from_stats(robot_stats: Dictionary, seed_value: int) -> int:
+	if float(robot_stats.speed) >= 5.8 or float(robot_stats.attack_speed) >= 1.55:
+		return 3
+	if float(robot_stats.armor) >= 48.0 or float(robot_stats.stability) >= 62.0:
+		return 2
+	if float(robot_stats.range) >= 4.55 or float(robot_stats.accuracy) >= 82.0:
+		return 1
+	return abs(seed_value) % 2
 
 func request_heavy_attack() -> bool:
 	if not active or hp <= 0.0 or heavy_cooldown > 0.0 or not has_manual_weapon():
@@ -157,6 +178,10 @@ func begin_fight() -> void:
 	heavy_cooldown = 0.0
 	_manual_heavy_requested = false
 	_maneuver_timer = 0.8 + think_offset
+	_personality_timer = 1.15 + think_offset
+	_auto_tool_timer = 3.6 + think_offset + float(personality_id) * 0.28
+	_stagger_time = 0.0
+	_brace_time = 0.0
 	model.set_moving(false)
 
 func stop_fight() -> void:
@@ -172,6 +197,10 @@ func _physics_process(delta: float) -> void:
 		return
 	attack_cooldown = maxf(0.0, attack_cooldown - delta)
 	heavy_cooldown = maxf(0.0, heavy_cooldown - delta)
+	_auto_tool_timer = maxf(0.0, _auto_tool_timer - delta)
+	_personality_timer = maxf(0.0, _personality_timer - delta)
+	_stagger_time = maxf(0.0, _stagger_time - delta)
+	_brace_time = maxf(0.0, _brace_time - delta)
 	_target_timer = maxf(0.0, _target_timer - delta)
 	if _target_timer <= 0.0 or not is_instance_valid(opponent) or opponent.hp <= 0.0:
 		_choose_target()
@@ -179,18 +208,37 @@ func _physics_process(delta: float) -> void:
 	if not is_instance_valid(opponent) or opponent.hp <= 0.0:
 		velocity = Vector3.ZERO
 		return
+	if auto_tool_enabled and _auto_tool_timer <= 0.0 and heavy_cooldown <= 0.0 and has_manual_weapon():
+		request_heavy_attack()
+		_auto_tool_timer = 7.2 - float(personality_id) * 0.35 + think_offset
 	_step_timer = maxf(0.0, _step_timer - delta)
 	_maneuver_timer = maxf(0.0, _maneuver_timer - delta)
 	_motion_time += delta
 	_impulse_velocity = _impulse_velocity.move_toward(Vector3.ZERO, delta * 9.5)
+	if _stagger_time > 0.0:
+		velocity = _impulse_velocity
+		move_and_slide()
+		_keep_inside_ring()
+		model.set_moving(false)
+		return
 	var difference := opponent.global_position - global_position
 	difference.y = 0.0
 	var distance := difference.length()
 	if distance > 0.05:
 		look_at(opponent.global_position, Vector3.UP, true)
 	var preferred_range := clampf(float(stats.range) * 0.70, 1.75, 5.4)
+	match personality_id:
+		0:
+			preferred_range *= 0.76
+		1:
+			preferred_range *= 1.18
+		2:
+			preferred_range *= 0.88
+		3:
+			preferred_range *= 1.04
 	var move_direction := Vector3.ZERO
-	if _manual_heavy_requested and distance > float(stats.range) * 1.22:
+	var contact_range := _melee_contact_range()
+	if _manual_heavy_requested and distance > contact_range:
 		move_direction = difference.normalized() * 1.42
 	elif distance > preferred_range:
 		move_direction = difference.normalized()
@@ -205,7 +253,11 @@ func _physics_process(delta: float) -> void:
 		_impulse_velocity += dodge_direction * _rng.randf_range(2.4, 4.0)
 		_strafe_direction *= -1.0
 		_maneuver_timer = _rng.randf_range(1.25, 2.35)
-	var movement_speed := float(stats.speed) * 0.82 * (0.72 if distance < preferred_range else 1.0)
+	if _personality_timer <= 0.0 and distance < preferred_range * 1.65:
+		_perform_personality_action(difference)
+		_personality_timer = 1.65 + float((_personality_actions + fighter_id) % 4) * 0.34
+	var personality_speed: float = [1.08, 0.94, 0.78, 1.14][personality_id]
+	var movement_speed := float(stats.speed) * 0.82 * personality_speed * (0.72 if distance < preferred_range else 1.0)
 	velocity = move_direction * movement_speed + _impulse_velocity
 	move_and_slide()
 	_keep_inside_ring()
@@ -214,7 +266,7 @@ func _physics_process(delta: float) -> void:
 	if walking and _step_timer <= 0.0:
 		sfx_requested.emit("step", 0.88 + float(fighter_id) * 0.10 + _rng.randf_range(-0.04, 0.04))
 		_step_timer = clampf(0.48 - float(stats.speed) * 0.025, 0.24, 0.40)
-	if _manual_heavy_requested and distance <= float(stats.range) * 1.22:
+	if _manual_heavy_requested and distance <= contact_range:
 		_perform_manual_heavy()
 	elif attack_cooldown <= 0.0 and distance <= float(stats.range):
 		_perform_attack(distance)
@@ -230,6 +282,37 @@ func _choose_target() -> void:
 			nearest = candidate
 			nearest_distance = distance
 	opponent = nearest
+
+func _melee_contact_range() -> float:
+	return clampf(2.30 + float(stats.range) * 0.18, 2.45, 3.55)
+
+func _perform_personality_action(difference: Vector3) -> void:
+	if difference.length() < 0.05:
+		return
+	_personality_actions += 1
+	var forward := difference.normalized()
+	var side := forward.cross(Vector3.UP) * _strafe_direction
+	match personality_id:
+		0:
+			_impulse_velocity += forward * 4.2
+			if _personality_actions % 3 == 1:
+				combat_event.emit("%s PRESIONA SIN RETROCEDER" % display_name, team_color)
+		1:
+			_impulse_velocity += side * 3.6 - forward * 1.25
+			_strafe_direction *= -1.0
+			if _personality_actions % 3 == 1:
+				combat_event.emit("%s CAMBIA EL ÁNGULO" % display_name, team_color)
+		2:
+			_brace_time = 0.85
+			_impulse_velocity *= 0.35
+			_impulse_velocity += forward * 1.7
+			if _personality_actions % 3 == 1:
+				combat_event.emit("%s SE AFIRMA EN EL RING" % display_name, team_color)
+		3:
+			_impulse_velocity += side * 5.2 + forward * 1.1
+			_strafe_direction *= -1.0
+			if _personality_actions % 3 == 1:
+				combat_event.emit("%s ENTRA CON UNA FINTA" % display_name, team_color)
 
 func _perform_attack(distance: float) -> void:
 	if not is_instance_valid(opponent) or opponent.hp <= 0.0:
@@ -277,10 +360,10 @@ func _perform_attack(distance: float) -> void:
 		var rush := opponent.global_position - global_position
 		rush.y = 0.0
 		if rush.length() > 0.05:
-			_impulse_velocity += rush.normalized() * (5.8 if special else 3.4)
-		opponent.take_damage(damage, global_position, special)
-		if attack_count % 5 == 0 and not special and has_arm:
-			get_tree().create_timer(0.22).timeout.connect(_combo_strike.bind(opponent, damage * 0.28, global_position))
+			_impulse_velocity += rush.normalized() * (7.2 if special else 5.1)
+		var contact_delay := 0.38 if special else 0.25
+		var combo_ready := attack_count % 5 == 0 and not special and has_arm
+		get_tree().create_timer(contact_delay).timeout.connect(_resolve_melee_hit.bind(opponent, damage, special, use_left, combo_ready))
 	attack_cooldown = maxf(0.42, 1.46 / float(stats.attack_speed))
 	if special:
 		attack_cooldown += 0.28
@@ -305,32 +388,68 @@ func _perform_manual_heavy() -> void:
 	var rush := opponent.global_position - global_position
 	rush.y = 0.0
 	if rush.length() > 0.05:
-		_impulse_velocity += rush.normalized() * 8.5
+		_impulse_velocity += rush.normalized() * 10.5
 	combat_event.emit("¡%s USA SU HERRAMIENTA!" % display_name, team_color)
-	opponent.take_tool_hit(damage, global_position, weapon_index, use_left)
+	get_tree().create_timer(0.42).timeout.connect(_resolve_tool_hit.bind(opponent, damage, weapon_index, use_left))
 	attack_cooldown = 1.05
+
+func _resolve_melee_hit(victim: ArenaFighter, damage: float, special: bool, use_left: bool, combo_ready: bool) -> void:
+	if not active or not is_instance_valid(victim) or victim.hp <= 0.0:
+		return
+	var distance := global_position.distance_to(victim.global_position)
+	if distance > _melee_contact_range() + 0.70:
+		combat_event.emit("%s ESQUIVA POR POCO" % victim.display_name, victim.team_color)
+		return
+	var impact_position := victim.model.get_part_world_position("torso")
+	impact_position += Vector3((-0.32 if use_left else 0.32), 0.10, 0.36)
+	victim.take_damage(damage, global_position, special, impact_position)
+	var recoil := global_position - victim.global_position
+	recoil.y = 0.0
+	if recoil.length() > 0.05:
+		_impulse_velocity += recoil.normalized() * 1.8
+	if combo_ready and victim.hp > 0.0:
+		get_tree().create_timer(0.24).timeout.connect(_combo_strike.bind(victim, damage * 0.28, global_position))
+
+func _resolve_tool_hit(victim: ArenaFighter, damage: float, weapon_index: int, use_left: bool) -> void:
+	if not active or not is_instance_valid(victim) or victim.hp <= 0.0:
+		return
+	if global_position.distance_to(victim.global_position) > _melee_contact_range() + 0.85:
+		combat_event.emit("LA HERRAMIENTA DE %s NO ALCANZA" % display_name, Color("c4cfdd"))
+		return
+	victim.take_tool_hit(damage, global_position, weapon_index, use_left)
 
 func _combo_strike(victim: ArenaFighter, damage: float, source_position: Vector3) -> void:
 	if not active or not is_instance_valid(victim) or victim.hp <= 0.0:
 		return
 	sfx_requested.emit("swing", 1.18)
-	model.play_attack(attack_count % 2 != 0, false)
-	victim.take_damage(damage, source_position, false)
+	var use_left := _choose_arm_side(attack_count % 2 != 0)
+	model.play_attack(use_left, false)
+	var rush := victim.global_position - global_position
+	rush.y = 0.0
+	if rush.length() > 0.05:
+		_impulse_velocity += rush.normalized() * 4.2
+	get_tree().create_timer(0.23).timeout.connect(_resolve_combo_hit.bind(victim, damage, source_position, use_left))
+
+func _resolve_combo_hit(victim: ArenaFighter, damage: float, source_position: Vector3, use_left: bool) -> void:
+	if not active or not is_instance_valid(victim) or victim.hp <= 0.0:
+		return
+	if global_position.distance_to(victim.global_position) > _melee_contact_range() + 0.55:
+		return
+	var impact_position := victim.model.get_part_world_position("torso") + Vector3(0.26 if use_left else -0.26, -0.18, 0.30)
+	victim.take_damage(damage, source_position, false, impact_position)
 
 func take_tool_hit(raw_damage: float, source_position: Vector3, weapon_index: int, attacker_used_left: bool) -> void:
 	if not active or hp <= 0.0:
 		return
-	take_damage(raw_damage, source_position, true)
-	if hp <= 0.0:
-		return
 	var target_slot := _choose_joint_target(weapon_index, attacker_used_left)
-	if target_slot.is_empty():
+	var impact_position := model.get_part_world_position(target_slot) if not target_slot.is_empty() else model.get_part_world_position("torso")
+	take_damage(raw_damage, source_position, true, impact_position)
+	if hp <= 0.0 or target_slot.is_empty():
 		return
 	var tool_factor := 1.42 if weapon_index in CUTTING_WEAPONS else (1.16 if weapon_index in FORCE_WEAPONS else 1.04)
 	var armor_factor := 100.0 / (100.0 + float(stats.armor) * 0.62 + float(stats.stability) * 0.22)
 	var joint_damage := maxf(22.0, raw_damage * tool_factor * armor_factor)
 	joint_integrity[target_slot] = float(joint_integrity.get(target_slot, 1.0)) - joint_damage
-	var impact_position := model.get_part_world_position(target_slot)
 	_spawn_joint_burst(impact_position, joint_damage >= float(joint_maximum.get(target_slot, 1.0)) * 0.70)
 	if float(joint_integrity[target_slot]) <= 0.0:
 		_detach_combat_part(target_slot, source_position, impact_position)
@@ -388,21 +507,32 @@ func _apply_detach_penalty(slot: String) -> void:
 			stats.speed = maxf(1.4, float(stats.speed) * 0.88)
 			stats.energy = float(stats.energy) * 0.75
 
-func take_damage(raw_damage: float, source_position: Vector3, heavy: bool) -> void:
+func take_damage(raw_damage: float, source_position: Vector3, heavy: bool, contact_position := Vector3.ZERO) -> void:
 	if not active or hp <= 0.0:
 		return
+	_received_hits += 1
 	var reduction := 100.0 / (100.0 + float(stats.armor) * 2.35)
+	if _brace_time > 0.0:
+		reduction *= 0.84
 	var final_damage := maxf(2.0, raw_damage * reduction)
 	hp = maxf(0.0, hp - final_damage)
-	model.play_hit()
+	var strong_push := heavy or _received_hits % 4 == 0
+	model.play_hit(strong_push)
+	var damage_ratio := 1.0 - hp / max_hp
+	model.set_damage_state(3 if damage_ratio >= 0.78 else (2 if damage_ratio >= 0.52 else (1 if damage_ratio >= 0.25 else 0)))
 	sfx_requested.emit("heavy" if heavy else "hit", 0.92 + _rng.randf_range(-0.07, 0.08))
-	impact.emit(0.38 if heavy else 0.18, global_position + Vector3(0.0, 2.2, 0.0))
-	_spawn_impact_sparks(heavy)
+	var actual_contact: Vector3 = contact_position if contact_position != Vector3.ZERO else global_position + Vector3(0.0, 2.2, 0.0)
+	impact.emit(0.42 if heavy else (0.30 if strong_push else 0.20), actual_contact)
+	_spawn_impact_sparks(heavy, actual_contact)
 	var away := global_position - source_position
 	away.y = 0.0
 	if away.length() > 0.05:
 		var stability_factor := clampf(1.18 - float(stats.stability) / 105.0, 0.32, 1.0)
-		_impulse_velocity += away.normalized() * (7.2 if heavy else 3.5) * stability_factor
+		var push_force := 11.0 if heavy else (7.4 if strong_push else 4.0)
+		if _brace_time > 0.0:
+			push_force *= 0.55
+		_impulse_velocity += away.normalized() * push_force * stability_factor
+	_stagger_time = 0.48 if heavy else (0.28 if strong_push else 0.10)
 	health_changed.emit(fighter_id, hp / max_hp, hp, max_hp)
 	if hp <= 0.0:
 		active = false
@@ -417,6 +547,7 @@ func force_defeat() -> void:
 	hp = 0.0
 	active = false
 	health_changed.emit(fighter_id, 0.0, hp, max_hp)
+	model.set_damage_state(3)
 	model.play_defeat()
 	defeated.emit(fighter_id)
 
@@ -449,8 +580,8 @@ func _launch_energy_orb(victim: ArenaFighter, damage: float, heavy: bool) -> voi
 			orb.queue_free()
 	)
 
-func _spawn_impact_sparks(heavy: bool) -> void:
-	var spark_count := 18 if heavy else 8
+func _spawn_impact_sparks(heavy: bool, contact_position: Vector3) -> void:
+	var spark_count := 26 if heavy else 13
 	for index in range(spark_count):
 		var spark := MeshInstance3D.new()
 		var sphere := SphereMesh.new()
@@ -465,7 +596,7 @@ func _spawn_impact_sparks(heavy: bool) -> void:
 		sphere.material = material
 		spark.mesh = sphere
 		get_parent().add_child(spark)
-		spark.global_position = global_position + Vector3(0.0, 2.2, 0.0)
+		spark.global_position = contact_position
 		var angle := TAU * float(index) / float(spark_count) + _rng.randf_range(-0.28, 0.28)
 		var destination := spark.global_position + Vector3(cos(angle), _rng.randf_range(-0.15, 0.85), sin(angle)) * (1.55 if heavy else 0.86)
 		var spark_tween := spark.create_tween()

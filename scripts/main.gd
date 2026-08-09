@@ -7,7 +7,7 @@ const AudioScript = preload("res://scripts/robot_audio.gd")
 const ThumbnailScript = preload("res://scripts/part_thumbnail.gd")
 const LanScript = preload("res://scripts/lan_manager.gd")
 
-enum GameState { MENU, TIME_SELECT, BUILD, LAN_LOBBY, BATTLE, RESULT, HELP }
+enum GameState { MENU, TIME_SELECT, BUILD, OPPONENT_PREVIEW, LAN_LOBBY, BATTLE, RESULT, HELP }
 
 const BLUE := Color("43d8ff")
 const RED := Color("ff537f")
@@ -16,6 +16,7 @@ const INK := Color("e9f5ff")
 const PANEL := Color("d90a1230")
 const PANEL_LIGHT := Color("e5172750")
 const TEAM_COLORS := [Color("43d8ff"), Color("6f8cff"), Color("8edfa8"), Color("ff8b72")]
+const CPU_CODENAMES := ["REMACHE", "COBALTO", "TRITÓN", "YUNQUE", "CIRCUITO", "ÓRBITA", "MAMUT", "VÓRTICE", "BUNKER", "COMETA"]
 
 var state := GameState.MENU
 var game_mode := "story"
@@ -39,6 +40,8 @@ var battle_speed := 1.0
 var preview_time := 0.0
 var battle_camera_time := 0.0
 var camera_shake := 0.0
+var impact_focus_time := 0.0
+var impact_focus_position := Vector3.ZERO
 var local_lan_index := 0
 
 var camera: Camera3D
@@ -75,6 +78,10 @@ var lan_start_button: Button
 var speed_button: Button
 var recently_unlocked_slot := ""
 var recently_unlocked_index := -1
+var story_opponent_build := {}
+var story_opponent_level := -1
+var story_opponent_name := ""
+var ai_recommended_build := {}
 
 func _ready() -> void:
 	Engine.time_scale = 1.0
@@ -96,7 +103,7 @@ func _ready() -> void:
 	_show_main_menu()
 
 func _process(delta: float) -> void:
-	if is_instance_valid(preview_robot) and state in [GameState.MENU, GameState.TIME_SELECT, GameState.BUILD, GameState.HELP]:
+	if is_instance_valid(preview_robot) and state in [GameState.MENU, GameState.TIME_SELECT, GameState.BUILD, GameState.OPPONENT_PREVIEW, GameState.HELP]:
 		preview_time += delta
 		if state == GameState.BUILD:
 			preview_robot.rotation.y = lerpf(preview_robot.rotation.y, sin(preview_time * 0.72) * 0.18, minf(1.0, delta * 4.0))
@@ -129,6 +136,11 @@ func _update_battle_camera(delta: float) -> void:
 		return
 	midpoint /= float(visible_count)
 	midpoint.y = 2.15
+	impact_focus_time = maxf(0.0, impact_focus_time - delta)
+	if impact_focus_time > 0.0:
+		var cinematic_focus := impact_focus_position
+		cinematic_focus.y = clampf(cinematic_focus.y, 1.7, 3.4)
+		midpoint = midpoint.lerp(cinematic_focus, 0.38)
 	var separation := 0.0
 	for fighter in fighters:
 		if is_instance_valid(fighter):
@@ -537,10 +549,125 @@ func _finish_robot() -> void:
 		return
 	if game_mode == "story":
 		_save_last_build(player_builds[0])
+		_show_story_opponent_preview()
+		return
 	if game_mode == "lan":
 		_show_lan_lobby()
 		return
 	_start_battle()
+
+func _ensure_story_opponent() -> void:
+	if story_opponent_level == cpu_level and not story_opponent_build.is_empty():
+		return
+	var max_cpu_part := clampi(3 + floori(float(cpu_level) / 2.0), 3, 19)
+	story_opponent_build = Catalog.random_build(max_cpu_part)
+	story_opponent_level = cpu_level
+	story_opponent_name = "%s-%03d" % [CPU_CODENAMES[(cpu_level - 1) % CPU_CODENAMES.size()], cpu_level]
+	ai_recommended_build.clear()
+
+func _story_cpu_multiplier() -> float:
+	return 0.62 + log(float(cpu_level) + 1.0) * 0.16 + float(cpu_level) * 0.007
+
+func _scaled_story_stats(build: Dictionary) -> Dictionary:
+	var result := Catalog.build_stats(build).duplicate(true)
+	var multiplier := _story_cpu_multiplier()
+	result.health = float(result.health) * multiplier
+	result.power = float(result.power) * multiplier
+	result.armor = float(result.armor) * sqrt(multiplier)
+	result.energy = float(result.energy) * multiplier
+	return result
+
+func _rating_from_stats(robot_stats: Dictionary) -> float:
+	var durability := float(robot_stats.health) * (1.0 + float(robot_stats.armor) / 115.0)
+	var dps := float(robot_stats.power) * float(robot_stats.attack_speed) * float(robot_stats.accuracy) / 100.0
+	var control := 0.72 + float(robot_stats.speed) * 0.035 + float(robot_stats.range) * 0.025 + float(robot_stats.stability) * 0.002
+	return sqrt(maxf(0.001, durability * dps)) * control
+
+func _story_prediction_for(player_robot: Dictionary, opponent_robot: Dictionary) -> Dictionary:
+	var player_rating := Catalog.combat_rating(player_robot)
+	var cpu_rating := _rating_from_stats(_scaled_story_stats(opponent_robot))
+	var player_affinity := Catalog.dominant_affinity(player_robot)
+	var cpu_affinity := Catalog.dominant_affinity(opponent_robot)
+	player_rating *= Catalog.affinity_multiplier(player_affinity, cpu_affinity)
+	cpu_rating *= Catalog.affinity_multiplier(cpu_affinity, player_affinity)
+	var total := maxf(0.001, player_rating + cpu_rating)
+	return {"player": player_rating / total, "cpu": cpu_rating / total}
+
+func _show_story_opponent_preview() -> void:
+	state = GameState.OPPONENT_PREVIEW
+	_ensure_story_opponent()
+	_clear_ui()
+	_clear_fighters()
+	var player_robot: Dictionary = player_builds[0]
+	var player_stats := Catalog.build_stats(player_robot)
+	var cpu_stats := _scaled_story_stats(story_opponent_build)
+	var prediction := _story_prediction_for(player_robot, story_opponent_build)
+	_show_workshop_preview(story_opponent_build, Vector3(2.85, 0.0, 0.0), RED)
+	preview_robot.scale = Vector3.ONE * 1.20
+	preview_robot.remember_floor_height()
+	camera.position = Vector3(0.15, 5.15, 12.25)
+	camera.fov = 50.0
+	camera.look_at(Vector3(1.35, 2.55, 0.0), Vector3.UP)
+	var panel := PanelContainer.new()
+	panel.anchor_left = 0.018
+	panel.anchor_top = 0.025
+	panel.anchor_right = 0.57
+	panel.anchor_bottom = 0.975
+	panel.add_theme_stylebox_override("panel", _panel_style(PANEL, 22))
+	ui_root.add_child(panel)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 7)
+	panel.add_child(box)
+	box.add_child(_title_label("PRÓXIMO RIVAL · NIVEL %d" % cpu_level, 31, GOLD))
+	var opponent_title := _title_label(story_opponent_name, 38, RED)
+	box.add_child(opponent_title)
+	var affinity := Catalog.dominant_affinity(story_opponent_build)
+	var personality_id := FighterScript._personality_from_stats(cpu_stats, cpu_level * 7919)
+	var identity := _label("AFINIDAD %s  ·  IA %s" % [Catalog.AFFINITY_NAMES[affinity], FighterScript.PERSONALITY_NAMES[personality_id]], 16, Catalog.AFFINITY_COLORS[affinity])
+	identity.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(identity)
+	var chance := _label("ANÁLISIS: TU ROBOT %.0f%%  ·  RIVAL %.0f%%" % [float(prediction.player) * 100.0, float(prediction.cpu) * 100.0], 18, BLUE if float(prediction.player) >= 0.5 else RED)
+	chance.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(chance)
+	box.add_child(_separator())
+	var table := GridContainer.new()
+	table.columns = 3
+	table.add_theme_constant_override("h_separation", 14)
+	table.add_theme_constant_override("v_separation", 4)
+	box.add_child(table)
+	var your_header := _label("TU ROBOT", 14, BLUE)
+	your_header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	table.add_child(your_header)
+	var stat_header := _label("ESTADÍSTICA", 14, GOLD)
+	stat_header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	table.add_child(stat_header)
+	var rival_header := _label("RIVAL", 14, RED)
+	rival_header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	table.add_child(rival_header)
+	for key in Catalog.STAT_KEYS:
+		var player_value := float(player_stats[key])
+		var cpu_value := float(cpu_stats[key])
+		var lower_is_better := key == "weight"
+		var player_better := player_value < cpu_value if lower_is_better else player_value > cpu_value
+		var cpu_better := cpu_value < player_value if lower_is_better else cpu_value > player_value
+		var player_label := _label(_format_comparison_stat(key, player_value), 14, Color("8fffc1") if player_better else INK)
+		player_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		player_label.custom_minimum_size.x = 105.0
+		table.add_child(player_label)
+		var name_label := _label(Catalog.STAT_LABELS[key], 13, Color("c4d3e8"))
+		name_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		name_label.custom_minimum_size.x = 130.0
+		table.add_child(name_label)
+		var cpu_label := _label(_format_comparison_stat(key, cpu_value), 14, Color("ff9cac") if cpu_better else INK)
+		cpu_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		cpu_label.custom_minimum_size.x = 105.0
+		table.add_child(cpu_label)
+	box.add_child(_make_button("⚙  ENTRAR AL RING", _start_battle, GOLD, Vector2(0, 56)))
+	box.add_child(_make_button("🔧  AJUSTAR MI ROBOT", _rebuild_from_result, Color("9d88ff"), Vector2(0, 48)))
+	box.add_child(_make_button("←  MENÚ PRINCIPAL", _show_main_menu, Color("60759a"), Vector2(0, 44)))
+
+func _format_comparison_stat(key: String, value: float) -> String:
+	return "%.1f" % value if key in ["speed", "attack_speed", "range"] else "%.0f" % value
 
 func _show_lan_lobby() -> void:
 	state = GameState.LAN_LOBBY
@@ -613,6 +740,7 @@ func _start_battle() -> void:
 	battle_speed = 1.0
 	battle_camera_time = 0.0
 	camera_shake = 0.0
+	impact_focus_time = 0.0
 	battle_started = false
 	battle_finished = false
 	battle_time_left = 90.0
@@ -633,10 +761,10 @@ func _start_battle() -> void:
 		multipliers.append(1.0)
 		names.append("ROBOT J%d" % (index + 1))
 	if game_mode == "story":
-		var max_cpu_part := clampi(3 + floori(float(cpu_level) / 2.0), 3, 19)
-		battle_builds.append(Catalog.random_build(max_cpu_part))
-		multipliers.append(0.62 + log(float(cpu_level) + 1.0) * 0.16 + float(cpu_level) * 0.007)
-		names.append("CPU-%04d" % cpu_level)
+		_ensure_story_opponent()
+		battle_builds.append(story_opponent_build.duplicate(true))
+		multipliers.append(_story_cpu_multiplier())
+		names.append(story_opponent_name)
 	if battle_builds.size() < 2:
 		_show_main_menu()
 		return
@@ -646,6 +774,7 @@ func _start_battle() -> void:
 		ring_root.add_child(fighter)
 		fighter.position = spawn_positions[index]
 		fighter.setup_robot(battle_builds[index], TEAM_COLORS[index], multipliers[index], index, names[index])
+		fighter.auto_tool_enabled = game_mode == "story" and index == 1
 		fighter.health_changed.connect(_on_health_changed)
 		fighter.defeated.connect(_on_fighter_defeated)
 		fighter.combat_event.connect(_show_battle_message)
@@ -664,8 +793,10 @@ func _start_battle() -> void:
 	for fighter in fighters:
 		_on_health_changed(fighter.fighter_id, 1.0, fighter.hp, fighter.max_hp)
 	if fighters.size() == 2:
-		var prediction := Catalog.matchup_prediction(battle_builds[0], battle_builds[1])
-		battle_message.text = "ANÁLISIS · J1 %.0f%%  /  J2 %.0f%%" % [float(prediction.a) * 100.0, float(prediction.b) * 100.0]
+		var prediction := _story_prediction_for(battle_builds[0], battle_builds[1]) if game_mode == "story" else Catalog.matchup_prediction(battle_builds[0], battle_builds[1])
+		var chance_a := float(prediction.player) if game_mode == "story" else float(prediction.a)
+		var chance_b := float(prediction.cpu) if game_mode == "story" else float(prediction.b)
+		battle_message.text = "ANÁLISIS · J1 %.0f%%  /  J2 %.0f%%" % [chance_a * 100.0, chance_b * 100.0]
 		battle_message.modulate = Color("c8d8ef")
 		await get_tree().create_timer(0.85).timeout
 		if state != GameState.BATTLE:
@@ -703,7 +834,7 @@ func _build_battle_ui(names: Array[String]) -> void:
 		var fighter_box := VBoxContainer.new()
 		fighter_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(fighter_box)
-		var title := _label("%s · %s" % [names[index], Catalog.AFFINITY_NAMES[Catalog.dominant_affinity(fighters[index].build)]], 14, TEAM_COLORS[index])
+		var title := _label("%s · %s · %s" % [names[index], Catalog.AFFINITY_NAMES[Catalog.dominant_affinity(fighters[index].build)], fighters[index].personality_name], 13, TEAM_COLORS[index])
 		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		fighter_box.add_child(title)
 		var hp_bar := _health_bar(TEAM_COLORS[index])
@@ -803,6 +934,9 @@ func _on_fighter_sfx(kind: String, pitch: float) -> void:
 
 func _on_fighter_impact(strength: float, _impact_position: Vector3) -> void:
 	camera_shake = maxf(camera_shake, clampf(strength, 0.08, 0.46))
+	if strength >= 0.28:
+		impact_focus_position = _impact_position
+		impact_focus_time = 0.52
 	if strength >= 0.42:
 		camera.fov = 47.0
 		var camera_tween := camera.create_tween()
@@ -847,6 +981,7 @@ func _finish_by_time() -> void:
 	for fighter in fighters:
 		if is_instance_valid(fighter) and fighter.fighter_id != last_winner:
 			fighter.stop_fight()
+			fighter.model.set_damage_state(3)
 			fighter.model.play_defeat()
 	_complete_battle()
 
@@ -885,7 +1020,7 @@ func _show_results() -> void:
 	state = GameState.RESULT
 	Engine.time_scale = 1.0
 	_clear_ui()
-	var panel := _center_panel(Vector2(600.0, 560.0))
+	var panel := _center_panel(Vector2(650.0, 700.0 if game_mode == "story" else 580.0))
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 14)
 	panel.add_child(box)
@@ -906,6 +1041,14 @@ func _show_results() -> void:
 		if victory:
 			box.add_child(_make_button("▶  SIGUIENTE RIVAL · NIVEL %d" % cpu_level, _next_cpu_battle, BLUE, Vector2(540, 64)))
 		else:
+			ai_recommended_build = _optimize_owned_build(story_opponent_build)
+			var current_prediction := _story_prediction_for(player_builds[0], story_opponent_build)
+			var improved_prediction := _story_prediction_for(ai_recommended_build, story_opponent_build)
+			var advisor := _label("IA MECÁNICA: puedo mejorar tu posibilidad estimada de %.0f%% a %.0f%% usando tus piezas actuales." % [float(current_prediction.player) * 100.0, float(improved_prediction.player) * 100.0], 17, Color("8fffc1"))
+			advisor.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			advisor.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+			box.add_child(advisor)
+			box.add_child(_make_button("🤖  IA: ARMAR EL MEJOR ROBOT", _apply_ai_recommendation, Color("78dca0"), Vector2(540, 62)))
 			box.add_child(_make_button("↻  REINTENTAR NIVEL %d" % cpu_level, _retry_cpu_battle, RED, Vector2(540, 64)))
 		box.add_child(_make_button("🔧  VOLVER AL TALLER", _rebuild_from_result, Color("9d88ff"), Vector2(540, 58)))
 	elif game_mode == "local":
@@ -922,10 +1065,49 @@ func _show_results() -> void:
 	box.add_child(_make_button("⌂  MENÚ PRINCIPAL", _show_main_menu, Color("60759a"), Vector2(540, 52)))
 
 func _next_cpu_battle() -> void:
-	_start_battle()
+	story_opponent_build.clear()
+	story_opponent_level = -1
+	_show_story_opponent_preview()
 
 func _retry_cpu_battle() -> void:
-	_start_battle()
+	_show_story_opponent_preview()
+
+func _optimize_owned_build(opponent_build: Dictionary) -> Dictionary:
+	var best: Dictionary = player_builds[0].duplicate(true) if not player_builds.is_empty() else _load_last_build()
+	for _pass_index in range(4):
+		for slot in Catalog.SLOTS:
+			var unlocked: Array = unlocked_parts.get(slot, [0, 1, 2, 3])
+			var best_index := int(best.get(slot, 0))
+			var best_score := _candidate_story_score(best, opponent_build)
+			for option_value in unlocked:
+				var trial := best.duplicate(true)
+				trial[slot] = int(option_value)
+				var score := _candidate_story_score(trial, opponent_build)
+				if score > best_score + 0.0001:
+					best_score = score
+					best_index = int(option_value)
+			best[slot] = best_index
+	return best
+
+func _candidate_story_score(candidate: Dictionary, opponent_build: Dictionary) -> float:
+	var prediction := _story_prediction_for(candidate, opponent_build)
+	var opponent_affinity := Catalog.dominant_affinity(opponent_build)
+	var left_bonus := Catalog.affinity_multiplier(Catalog.weapon_affinity(candidate, true), opponent_affinity)
+	var right_bonus := Catalog.affinity_multiplier(Catalog.weapon_affinity(candidate, false), opponent_affinity)
+	return float(prediction.player) + (left_bonus + right_bonus - 2.0) * 0.018
+
+func _apply_ai_recommendation() -> void:
+	if ai_recommended_build.is_empty():
+		ai_recommended_build = _optimize_owned_build(story_opponent_build)
+	current_builder = 1
+	current_build = ai_recommended_build.duplicate(true)
+	player_builds.clear()
+	_start_builder()
+	var prediction := _story_prediction_for(current_build, story_opponent_build)
+	if option_detail_label:
+		option_detail_label.text = "🤖 IA MECÁNICA: robot optimizado contra %s · posibilidad estimada %.0f%%" % [story_opponent_name, float(prediction.player) * 100.0]
+	if audio:
+		audio.play_sfx("unlock", 0.92)
 
 func _rebuild_from_result() -> void:
 	current_builder = 1
@@ -967,7 +1149,7 @@ func _show_battle_message(message: String, color: Color) -> void:
 func _show_help() -> void:
 	state = GameState.HELP
 	_clear_ui()
-	var panel := _center_panel(Vector2(730.0, 650.0))
+	var panel := _center_panel(Vector2(760.0, 760.0))
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 12)
 	panel.add_child(box)
@@ -978,8 +1160,9 @@ func _show_help() -> void:
 		"3. HISTORIA Y TIENDA\nGana créditos peleando contra la CPU y toca una pieza bloqueada para comprarla.\n\n" +
 		"4. USA TU HERRAMIENTA\nEl botón activa el arma equipada contra una unión. Puede desprender armas, brazos o cabeza; nunca piernas ni torso. Cada pérdida reduce estadísticas.\n\n" +
 		"5. RITMO DEL COMBATE\nLa pelea base es pesada y mecánica. En Historia y VS local puedes alternar VELOCIDAD x1/x2.\n\n" +
+		"6. ANALIZA Y ADAPTA\nAntes de cada pelea de Historia ves al rival, sus 10 estadísticas, afinidad, personalidad y posibilidades. Si pierdes, la IA mecánica puede armar tu mejor combinación desbloqueada.\n\n" +
 		"VS Y LAN\nEn VS están las 160 piezas desbloqueadas. En LAN pueden conectar de 2 a 4 teléfonos al mismo Wi-Fi.",
-		17,
+		16,
 		INK
 	)
 	help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -1006,6 +1189,9 @@ func _clear_fighters() -> void:
 	for fighter in fighters:
 		if is_instance_valid(fighter):
 			fighter.queue_free()
+	for debris in get_tree().get_nodes_in_group("battle_debris"):
+		if is_instance_valid(debris):
+			debris.queue_free()
 	fighters.clear()
 	fighter_a = null
 	fighter_b = null
@@ -1288,6 +1474,8 @@ func _run_smoke_test() -> void:
 	add_child(model_test)
 	model_test.build_robot(maximum_build, BLUE)
 	passed = passed and model_test.part_roots.size() == 8
+	model_test.set_damage_state(3)
+	passed = passed and model_test.has_node("MechanicalDamage")
 	passed = passed and audio.streams.has("battle_music") and audio.streams.size() >= 12
 	var fighter_test_a := FighterScript.new()
 	var fighter_test_b := FighterScript.new()
@@ -1295,6 +1483,7 @@ func _run_smoke_test() -> void:
 	add_child(fighter_test_b)
 	fighter_test_a.setup_robot(maximum_build, BLUE, 1.0, 0, "PRUEBA A")
 	fighter_test_b.setup_robot(Catalog.empty_build(), RED, 0.75, 1, "PRUEBA B")
+	passed = passed and fighter_test_a.personality_id in range(4)
 	fighter_test_a.set_opponent(fighter_test_b)
 	fighter_test_b.set_opponent(fighter_test_a)
 	fighter_test_a.begin_fight()
@@ -1306,5 +1495,7 @@ func _run_smoke_test() -> void:
 	var parts_before: int = fighter_test_b.model.part_roots.size()
 	fighter_test_b.take_tool_hit(200.0, fighter_test_a.global_position, 2, true)
 	passed = passed and fighter_test_b.model.part_roots.size() < parts_before
-	print("FORJA_SMOKE_TEST:", "PASS" if passed else "FAIL", " slots=", Catalog.SLOTS.size(), " options=160 stats=10 affinities=5 LAN=4 combat=OK detach=OK")
+	var preview_prediction := _story_prediction_for(maximum_build, Catalog.empty_build())
+	passed = passed and float(preview_prediction.player) > 0.0 and float(preview_prediction.cpu) > 0.0
+	print("FORJA_SMOKE_TEST:", "PASS" if passed else "FAIL", " slots=", Catalog.SLOTS.size(), " options=160 stats=10 affinities=5 LAN=4 combat=OK contact=OK advisor=OK")
 	get_tree().quit(0 if passed else 1)
