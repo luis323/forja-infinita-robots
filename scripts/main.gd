@@ -644,12 +644,13 @@ func _show_story_opponent_preview() -> void:
 	var rival_header := _label("RIVAL", 14, RED)
 	rival_header.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	table.add_child(rival_header)
-	for key in Catalog.STAT_KEYS:
+	for key_value in Catalog.STAT_KEYS:
+		var key: String = str(key_value)
 		var player_value := float(player_stats[key])
 		var cpu_value := float(cpu_stats[key])
-		var lower_is_better := key == "weight"
-		var player_better := player_value < cpu_value if lower_is_better else player_value > cpu_value
-		var cpu_better := cpu_value < player_value if lower_is_better else cpu_value > player_value
+		var lower_is_better: bool = key == "weight"
+		var player_better: bool = player_value < cpu_value if lower_is_better else player_value > cpu_value
+		var cpu_better: bool = cpu_value < player_value if lower_is_better else cpu_value > player_value
 		var player_label := _label(_format_comparison_stat(key, player_value), 14, Color("8fffc1") if player_better else INK)
 		player_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		player_label.custom_minimum_size.x = 105.0
