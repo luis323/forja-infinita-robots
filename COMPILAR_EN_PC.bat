@@ -1,6 +1,6 @@
 @echo off
 setlocal
-title Forja Infinita - Compilar y ejecutar
+title Forja Infinita Robots Kids - Compilar y ejecutar
 cd /d "%~dp0"
 
 where godot4.exe >nul 2>nul
@@ -26,7 +26,6 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo Iniciando Forja Infinita...
+echo Iniciando Forja Infinita Robots Kids...
 %GODOT% --path "%cd%"
 endlocal
-

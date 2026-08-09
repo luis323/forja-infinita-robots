@@ -17,6 +17,21 @@ const PANEL := Color("d90a1230")
 const PANEL_LIGHT := Color("e5172750")
 const TEAM_COLORS := [Color("43d8ff"), Color("6f8cff"), Color("8edfa8"), Color("ff8b72")]
 const CPU_CODENAMES := ["REMACHE", "COBALTO", "TRITÓN", "YUNQUE", "CIRCUITO", "ÓRBITA", "MAMUT", "VÓRTICE", "BUNKER", "COMETA"]
+const KIDS_RIVAL_NAMES := ["CHISPA", "BURBUJA", "TUERQUITA", "NUBE", "PÍXEL", "COHETE", "TRÉBOL", "GALLETA", "COMETA", "POMPÓN"]
+const KIDS_ROBOT_NAMES := ["ESTRELLA", "RAYITO", "FORTACHÓN", "INVENTOR"]
+const KIDS_ROBOT_TIPS := [
+	"Es bueno en todo y muy fácil de usar.",
+	"Se mueve rápido y ataca muchas veces.",
+	"Tiene mucha vida y aguanta los empujones.",
+	"Usa herramientas con buena energía y alcance.",
+]
+const KIDS_ROBOT_COLORS := [Color("53d8ff"), Color("ffe36e"), Color("78dca0"), Color("c58cff")]
+const KIDS_PRESETS := [
+	{"head": 0, "torso": 1, "left_arm": 0, "right_arm": 1, "left_leg": 0, "right_leg": 1, "left_weapon": 0, "right_weapon": 3},
+	{"head": 3, "torso": 3, "left_arm": 2, "right_arm": 2, "left_leg": 3, "right_leg": 3, "left_weapon": 3, "right_weapon": 3},
+	{"head": 2, "torso": 2, "left_arm": 0, "right_arm": 0, "left_leg": 2, "right_leg": 2, "left_weapon": 0, "right_weapon": 0},
+	{"head": 1, "torso": 1, "left_arm": 1, "right_arm": 3, "left_leg": 1, "right_leg": 0, "left_weapon": 2, "right_weapon": 1},
+]
 
 var state := GameState.MENU
 var game_mode := "story"
@@ -30,6 +45,7 @@ var cpu_level := 1
 var best_level := 1
 var total_wins := 0
 var credits := 600
+var kids_stars := 0
 var unlocked_parts := {}
 var last_reward := 0
 var battle_time_left := 90.0
@@ -81,7 +97,9 @@ var recently_unlocked_index := -1
 var story_opponent_build := {}
 var story_opponent_level := -1
 var story_opponent_name := ""
+var story_opponent_mode := ""
 var ai_recommended_build := {}
+var kids_preset_index := 0
 
 func _ready() -> void:
 	Engine.time_scale = 1.0
@@ -160,10 +178,10 @@ func _setup_world() -> void:
 	var world_environment := WorldEnvironment.new()
 	var environment := Environment.new()
 	environment.background_mode = Environment.BG_COLOR
-	environment.background_color = Color("050918")
+	environment.background_color = Color("173b63")
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	environment.ambient_light_color = Color("769bce")
-	environment.ambient_light_energy = 0.72
+	environment.ambient_light_color = Color("b8ddff")
+	environment.ambient_light_energy = 0.92
 	environment.tonemap_mode = Environment.TONE_MAPPER_FILMIC
 	environment.glow_enabled = true
 	environment.glow_intensity = 0.85
@@ -217,7 +235,8 @@ func _show_main_menu() -> void:
 	_reset_runtime()
 	state = GameState.MENU
 	_clear_ui()
-	_show_workshop_preview(Catalog.random_build(19), Vector3(2.85, 0.0, 0.0), BLUE)
+	var menu_build: Dictionary = KIDS_PRESETS[clampi(kids_preset_index, 0, KIDS_PRESETS.size() - 1)]
+	_show_workshop_preview(menu_build, Vector3(2.85, 0.0, 0.0), KIDS_ROBOT_COLORS[clampi(kids_preset_index, 0, KIDS_ROBOT_COLORS.size() - 1)])
 	camera.position = Vector3(0.0, 5.4, 13.4)
 	camera.fov = 54.0
 	camera.look_at(Vector3(0.8, 2.45, 0.0), Vector3.UP)
@@ -232,26 +251,30 @@ func _show_main_menu() -> void:
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 13)
 	panel.add_child(box)
-	box.add_child(_title_label("FORJA INFINITA", 44, GOLD))
-	box.add_child(_title_label("ROBOTS", 64, BLUE))
-	var subtitle := _label("Construye la combinación más loca.\nDespués mira cómo tu robot pelea solo.", 20, INK)
+	box.add_child(_title_label("FORJA INFINITA", 39, GOLD))
+	box.add_child(_title_label("ROBOTS KIDS", 56, BLUE))
+	var subtitle := _label("Elige un robot, conoce a tu rival\ny juega con un solo botón especial.", 19, INK)
 	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(subtitle)
 	box.add_child(_separator())
-	box.add_child(_make_button("🏆  HISTORIA · GANA CRÉDITOS", _choose_mode.bind("story"), BLUE, Vector2(500, 60)))
-	box.add_child(_make_button("⚔  VS HUMANO · TODO DESBLOQUEADO", _choose_mode.bind("local"), RED, Vector2(500, 60)))
-	box.add_child(_make_button("📡  LAN · 2 A 4 ROBOTS", _choose_mode.bind("lan"), Color("8edfa8"), Vector2(500, 60)))
-	box.add_child(_make_button("?  CÓMO SE JUEGA", _show_help, Color("9d88ff"), Vector2(500, 54)))
-	var record := _label("CRÉDITOS: %d   ·   RÉCORD: NIVEL %d   ·   VICTORIAS: %d" % [credits, best_level, total_wins], 17, GOLD)
+	box.add_child(_make_button("🌟  JUGAR · MODO FÁCIL", _choose_mode.bind("kids"), Color("54c987"), Vector2(500, 72)))
+	box.add_child(_make_button("🔧  TALLER AVANZADO", _choose_mode.bind("story"), BLUE, Vector2(500, 51)))
+	box.add_child(_make_button("👥  DOS JUGADORES", _choose_mode.bind("local"), Color("ff8b72"), Vector2(500, 51)))
+	box.add_child(_make_button("📡  JUGAR POR WI-FI", _choose_mode.bind("lan"), Color("8edfa8"), Vector2(500, 51)))
+	box.add_child(_make_button("?  AYUDA", _show_help, Color("9d88ff"), Vector2(500, 46)))
+	var record := _label("ESTRELLAS: %d   ·   NIVEL: %d   ·   VICTORIAS: %d" % [kids_stars, best_level, total_wins], 15, GOLD)
 	record.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(record)
-	var tiny := _label("8 espacios · 20 opciones en cada uno · 25.600.000.000 combinaciones", 14, Color("a8bad7"))
+	var tiny := _label("Modo fácil: elegir → mirar rival → jugar", 14, Color("c8dcf5"))
 	tiny.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(tiny)
 
 func _choose_mode(mode: String) -> void:
 	game_mode = mode
 	local_lan_index = 0
+	if game_mode == "kids":
+		_start_kids_mode()
+		return
 	state = GameState.TIME_SELECT
 	_clear_ui()
 	var panel := _center_panel(Vector2(560.0, 590.0))
@@ -268,6 +291,101 @@ func _choose_mode(mode: String) -> void:
 	box.add_child(_make_button("🔧  2 MINUTOS", _select_time.bind(120.0), BLUE, Vector2(500, 60)))
 	box.add_child(_make_button("∞  SIN LÍMITE", _select_time.bind(-1.0), Color("9d88ff"), Vector2(500, 60)))
 	box.add_child(_make_button("←  VOLVER", _show_main_menu, Color("60759a"), Vector2(500, 48)))
+
+func _start_kids_mode() -> void:
+	current_builder = 1
+	player_builds.clear()
+	build_duration = -1.0
+	kids_preset_index = clampi(kids_preset_index, 0, KIDS_PRESETS.size() - 1)
+	var selected_build: Dictionary = KIDS_PRESETS[kids_preset_index]
+	current_build = selected_build.duplicate(true)
+	_show_kids_builder()
+
+func _show_kids_builder() -> void:
+	state = GameState.BUILD
+	battle_finished = false
+	build_duration = -1.0
+	_clear_ui()
+	_clear_fighters()
+	var tint: Color = KIDS_ROBOT_COLORS[kids_preset_index]
+	_show_workshop_preview(current_build, Vector3(-2.45, 0.0, 0.0), tint)
+	preview_robot.scale = Vector3.ONE * 1.52
+	preview_robot.remember_floor_height()
+	camera.position = Vector3(-0.45, 5.0, 11.4)
+	camera.fov = 47.0
+	camera.look_at(Vector3(-2.15, 2.65, 0.0), Vector3.UP)
+
+	var banner := _title_label("1 · ELIGE TU ROBOT", 32, GOLD)
+	banner.anchor_left = 0.015
+	banner.anchor_top = 0.02
+	banner.anchor_right = 0.57
+	banner.anchor_bottom = 0.10
+	ui_root.add_child(banner)
+
+	var panel := PanelContainer.new()
+	panel.anchor_left = 0.585
+	panel.anchor_top = 0.035
+	panel.anchor_right = 0.985
+	panel.anchor_bottom = 0.975
+	panel.add_theme_stylebox_override("panel", _panel_style(Color("e51c3157"), 26))
+	ui_root.add_child(panel)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 10)
+	panel.add_child(box)
+	box.add_child(_title_label(str(KIDS_ROBOT_NAMES[kids_preset_index]), 38, tint))
+	var tip := _label(str(KIDS_ROBOT_TIPS[kids_preset_index]), 19, INK)
+	tip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	tip.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(tip)
+	var stats := Catalog.normalized_stats(current_build)
+	var simple_stats := _label(
+		"❤️  VIDA       %s\n⚡  RAPIDEZ   %s\n💪  FUERZA     %s\n🛡  DEFENSA   %s" % [
+			_kids_meter(float(stats.health)),
+			_kids_meter(float(stats.speed)),
+			_kids_meter(float(stats.power)),
+			_kids_meter(float(stats.armor)),
+		],
+		18,
+		Color("f4fbff")
+	)
+	simple_stats.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	simple_stats.add_theme_constant_override("line_spacing", 7)
+	box.add_child(simple_stats)
+	box.add_child(_separator())
+	var choices := GridContainer.new()
+	choices.columns = 2
+	choices.add_theme_constant_override("h_separation", 8)
+	choices.add_theme_constant_override("v_separation", 8)
+	choices.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	box.add_child(choices)
+	for index in range(KIDS_ROBOT_NAMES.size()):
+		var prefix: String = "✓ " if index == kids_preset_index else ""
+		var choice := _make_button(prefix + str(KIDS_ROBOT_NAMES[index]), _select_kids_preset.bind(index), KIDS_ROBOT_COLORS[index], Vector2(210, 68))
+		choice.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		choice.add_theme_font_size_override("font_size", 17)
+		choices.add_child(choice)
+	box.add_child(_make_button("▶  2 · ¡LISTO! VER A MI RIVAL", _finish_kids_robot, Color("54c987"), Vector2(0, 68)))
+	box.add_child(_make_button("←  MENÚ", _show_main_menu, Color("60759a"), Vector2(0, 45)))
+
+func _select_kids_preset(index: int) -> void:
+	kids_preset_index = clampi(index, 0, KIDS_PRESETS.size() - 1)
+	var selected_build: Dictionary = KIDS_PRESETS[kids_preset_index]
+	current_build = selected_build.duplicate(true)
+	if audio:
+		audio.play_sfx("join", 0.94 + float(index) * 0.04)
+	_show_kids_builder()
+
+func _kids_meter(value: float) -> String:
+	var filled: int = clampi(roundi(value / 20.0), 1, 5)
+	return "●".repeat(filled) + "○".repeat(5 - filled)
+
+func _finish_kids_robot() -> void:
+	if state != GameState.BUILD:
+		return
+	player_builds.clear()
+	player_builds.append(current_build.duplicate(true))
+	_save_last_build(current_build)
+	_show_story_opponent_preview()
 
 func _select_time(seconds: float) -> void:
 	build_duration = seconds
@@ -557,12 +675,17 @@ func _finish_robot() -> void:
 	_start_battle()
 
 func _ensure_story_opponent() -> void:
-	if story_opponent_level == cpu_level and not story_opponent_build.is_empty():
+	if story_opponent_level == cpu_level and story_opponent_mode == game_mode and not story_opponent_build.is_empty():
 		return
-	var max_cpu_part := clampi(3 + floori(float(cpu_level) / 2.0), 3, 19)
+	var part_step: float = 3.0 if game_mode == "kids" else 2.0
+	var max_cpu_part := clampi(3 + floori(float(cpu_level) / part_step), 3, 19)
 	story_opponent_build = Catalog.random_build(max_cpu_part)
 	story_opponent_level = cpu_level
-	story_opponent_name = "%s-%03d" % [CPU_CODENAMES[(cpu_level - 1) % CPU_CODENAMES.size()], cpu_level]
+	story_opponent_mode = game_mode
+	if game_mode == "kids":
+		story_opponent_name = KIDS_RIVAL_NAMES[(cpu_level - 1) % KIDS_RIVAL_NAMES.size()]
+	else:
+		story_opponent_name = "%s-%03d" % [CPU_CODENAMES[(cpu_level - 1) % CPU_CODENAMES.size()], cpu_level]
 	ai_recommended_build.clear()
 
 func _story_cpu_multiplier() -> float:
@@ -571,6 +694,18 @@ func _story_cpu_multiplier() -> float:
 func _scaled_story_stats(build: Dictionary) -> Dictionary:
 	var result := Catalog.build_stats(build).duplicate(true)
 	var multiplier := _story_cpu_multiplier()
+	result.health = float(result.health) * multiplier
+	result.power = float(result.power) * multiplier
+	result.armor = float(result.armor) * sqrt(multiplier)
+	result.energy = float(result.energy) * multiplier
+	return result
+
+func _kids_cpu_multiplier() -> float:
+	return 0.50 + log(float(cpu_level) + 1.0) * 0.11 + float(cpu_level) * 0.004
+
+func _scaled_kids_stats(build: Dictionary) -> Dictionary:
+	var result := Catalog.build_stats(build).duplicate(true)
+	var multiplier := _kids_cpu_multiplier()
 	result.health = float(result.health) * multiplier
 	result.power = float(result.power) * multiplier
 	result.armor = float(result.armor) * sqrt(multiplier)
@@ -593,7 +728,16 @@ func _story_prediction_for(player_robot: Dictionary, opponent_robot: Dictionary)
 	var total := maxf(0.001, player_rating + cpu_rating)
 	return {"player": player_rating / total, "cpu": cpu_rating / total}
 
+func _kids_prediction_for(player_robot: Dictionary, opponent_robot: Dictionary) -> Dictionary:
+	var player_rating := Catalog.combat_rating(player_robot)
+	var cpu_rating := _rating_from_stats(_scaled_kids_stats(opponent_robot))
+	var total := maxf(0.001, player_rating + cpu_rating)
+	return {"player": player_rating / total, "cpu": cpu_rating / total}
+
 func _show_story_opponent_preview() -> void:
+	if game_mode == "kids":
+		_show_kids_opponent_preview()
+		return
 	state = GameState.OPPONENT_PREVIEW
 	_ensure_story_opponent()
 	_clear_ui()
@@ -666,6 +810,83 @@ func _show_story_opponent_preview() -> void:
 	box.add_child(_make_button("⚙  ENTRAR AL RING", _start_battle, GOLD, Vector2(0, 56)))
 	box.add_child(_make_button("🔧  AJUSTAR MI ROBOT", _rebuild_from_result, Color("9d88ff"), Vector2(0, 48)))
 	box.add_child(_make_button("←  MENÚ PRINCIPAL", _show_main_menu, Color("60759a"), Vector2(0, 44)))
+
+func _show_kids_opponent_preview() -> void:
+	state = GameState.OPPONENT_PREVIEW
+	_ensure_story_opponent()
+	_clear_ui()
+	_clear_fighters()
+	if player_builds.is_empty():
+		player_builds.append(current_build.duplicate(true))
+	var player_robot: Dictionary = player_builds[0]
+	var player_stats := Catalog.build_stats(player_robot)
+	var cpu_stats := _scaled_kids_stats(story_opponent_build)
+	var prediction := _kids_prediction_for(player_robot, story_opponent_build)
+	var player_chance: float = float(prediction.player)
+	var challenge_text: String = "¡ESTÁ MUY PAREJO!"
+	if player_chance >= 0.62:
+		challenge_text = "¡TU ROBOT TIENE VENTAJA!"
+	elif player_chance < 0.44:
+		challenge_text = "¡SERÁ UN RETO DIVERTIDO!"
+	_show_workshop_preview(story_opponent_build, Vector3(2.65, 0.0, 0.0), Color("ff9a76"))
+	preview_robot.scale = Vector3.ONE * 1.42
+	preview_robot.remember_floor_height()
+	camera.position = Vector3(0.20, 5.1, 11.7)
+	camera.fov = 48.0
+	camera.look_at(Vector3(2.25, 2.65, 0.0), Vector3.UP)
+
+	var panel := PanelContainer.new()
+	panel.anchor_left = 0.02
+	panel.anchor_top = 0.045
+	panel.anchor_right = 0.55
+	panel.anchor_bottom = 0.96
+	panel.add_theme_stylebox_override("panel", _panel_style(Color("e51c3157"), 26))
+	ui_root.add_child(panel)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 13)
+	panel.add_child(box)
+	box.add_child(_title_label("2 · CONOCE A TU RIVAL", 31, GOLD))
+	box.add_child(_title_label(story_opponent_name, 46, Color("ff9a76")))
+	var level_label := _label("NIVEL %d  ·  %s" % [cpu_level, challenge_text], 20, INK)
+	level_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(level_label)
+	box.add_child(_separator())
+	var max_health: float = maxf(float(player_stats.health), float(cpu_stats.health))
+	var max_power: float = maxf(float(player_stats.power), float(cpu_stats.power))
+	var max_speed: float = maxf(float(player_stats.speed), float(cpu_stats.speed))
+	var compare := _label(
+		"                 TÚ          RIVAL\n❤️  VIDA       %s   %s\n💪  FUERZA     %s   %s\n⚡  RAPIDEZ   %s   %s" % [
+			_kids_duel_meter(float(player_stats.health), max_health),
+			_kids_duel_meter(float(cpu_stats.health), max_health),
+			_kids_duel_meter(float(player_stats.power), max_power),
+			_kids_duel_meter(float(cpu_stats.power), max_power),
+			_kids_duel_meter(float(player_stats.speed), max_speed),
+			_kids_duel_meter(float(cpu_stats.speed), max_speed),
+		],
+		18,
+		Color("f4fbff")
+	)
+	compare.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	compare.add_theme_constant_override("line_spacing", 9)
+	box.add_child(compare)
+	var hint := _label("Los robots juegan solos. Tú solo debes tocar SUPERPODER cuando esté listo.", 18, Color("ccecff"))
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	hint.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	box.add_child(hint)
+	box.add_child(_make_button("▶  3 · ¡JUGAR!", _start_battle, Color("54c987"), Vector2(0, 72)))
+	box.add_child(_make_button("↩  CAMBIAR MI ROBOT", _return_to_kids_builder, Color("9d88ff"), Vector2(0, 54)))
+	box.add_child(_make_button("⌂  MENÚ", _show_main_menu, Color("60759a"), Vector2(0, 46)))
+
+func _kids_duel_meter(value: float, maximum: float) -> String:
+	var filled: int = clampi(roundi(value / maxf(0.001, maximum) * 5.0), 1, 5)
+	return "●".repeat(filled) + "○".repeat(5 - filled)
+
+func _return_to_kids_builder() -> void:
+	if not player_builds.is_empty():
+		current_build = player_builds[0].duplicate(true)
+	player_builds.clear()
+	_show_kids_builder()
 
 func _format_comparison_stat(key: String, value: float) -> String:
 	return "%.1f" % value if key in ["speed", "attack_speed", "range"] else "%.0f" % value
@@ -744,7 +965,7 @@ func _start_battle() -> void:
 	impact_focus_time = 0.0
 	battle_started = false
 	battle_finished = false
-	battle_time_left = 90.0
+	battle_time_left = 75.0 if game_mode == "kids" else 90.0
 	last_winner = -1
 	_clear_ui()
 	_clear_preview()
@@ -760,11 +981,14 @@ func _start_battle() -> void:
 	var names: Array[String] = []
 	for index in range(battle_builds.size()):
 		multipliers.append(1.0)
-		names.append("ROBOT J%d" % (index + 1))
-	if game_mode == "story":
+		if game_mode == "kids" and index == 0:
+			names.append(str(KIDS_ROBOT_NAMES[kids_preset_index]))
+		else:
+			names.append("ROBOT J%d" % (index + 1))
+	if game_mode in ["story", "kids"]:
 		_ensure_story_opponent()
 		battle_builds.append(story_opponent_build.duplicate(true))
-		multipliers.append(_story_cpu_multiplier())
+		multipliers.append(_kids_cpu_multiplier() if game_mode == "kids" else _story_cpu_multiplier())
 		names.append(story_opponent_name)
 	if battle_builds.size() < 2:
 		_show_main_menu()
@@ -774,8 +998,10 @@ func _start_battle() -> void:
 		var fighter: ArenaFighter = FighterScript.new()
 		ring_root.add_child(fighter)
 		fighter.position = spawn_positions[index]
-		fighter.setup_robot(battle_builds[index], TEAM_COLORS[index], multipliers[index], index, names[index])
-		fighter.auto_tool_enabled = game_mode == "story" and index == 1
+		fighter.friendly_mode = true
+		var fighter_tint: Color = KIDS_ROBOT_COLORS[kids_preset_index] if game_mode == "kids" and index == 0 else TEAM_COLORS[index]
+		fighter.setup_robot(battle_builds[index], fighter_tint, multipliers[index], index, names[index])
+		fighter.auto_tool_enabled = game_mode in ["story", "kids"] and index == 1
 		fighter.health_changed.connect(_on_health_changed)
 		fighter.defeated.connect(_on_fighter_defeated)
 		fighter.combat_event.connect(_show_battle_message)
@@ -794,10 +1020,10 @@ func _start_battle() -> void:
 	for fighter in fighters:
 		_on_health_changed(fighter.fighter_id, 1.0, fighter.hp, fighter.max_hp)
 	if fighters.size() == 2:
-		var prediction := _story_prediction_for(battle_builds[0], battle_builds[1]) if game_mode == "story" else Catalog.matchup_prediction(battle_builds[0], battle_builds[1])
-		var chance_a := float(prediction.player) if game_mode == "story" else float(prediction.a)
-		var chance_b := float(prediction.cpu) if game_mode == "story" else float(prediction.b)
-		battle_message.text = "ANÁLISIS · J1 %.0f%%  /  J2 %.0f%%" % [chance_a * 100.0, chance_b * 100.0]
+		var prediction: Dictionary = _kids_prediction_for(battle_builds[0], battle_builds[1]) if game_mode == "kids" else (_story_prediction_for(battle_builds[0], battle_builds[1]) if game_mode == "story" else Catalog.matchup_prediction(battle_builds[0], battle_builds[1]))
+		var chance_a: float = float(prediction.player) if game_mode in ["story", "kids"] else float(prediction.a)
+		var chance_b: float = float(prediction.cpu) if game_mode in ["story", "kids"] else float(prediction.b)
+		battle_message.text = "¡TODO LISTO!" if game_mode == "kids" else "ANÁLISIS · J1 %.0f%%  /  J2 %.0f%%" % [chance_a * 100.0, chance_b * 100.0]
 		battle_message.modulate = Color("c8d8ef")
 		await get_tree().create_timer(0.85).timeout
 		if state != GameState.BATTLE:
@@ -810,7 +1036,7 @@ func _start_battle() -> void:
 	battle_started = true
 	for fighter in fighters:
 		fighter.begin_fight()
-	_show_battle_message("¡COMBATE!", GOLD)
+	_show_battle_message("¡A JUGAR!" if game_mode == "kids" else "¡COMBATE!", GOLD)
 
 func _build_battle_ui(names: Array[String]) -> void:
 	var top := PanelContainer.new()
@@ -823,7 +1049,7 @@ func _build_battle_ui(names: Array[String]) -> void:
 	ui_root.add_child(top)
 	var outer := VBoxContainer.new()
 	top.add_child(outer)
-	battle_clock = _title_label("90", 29, GOLD)
+	battle_clock = _title_label("75" if game_mode == "kids" else "90", 29, GOLD)
 	battle_clock.custom_minimum_size = Vector2(0, 32)
 	outer.add_child(battle_clock)
 	var row := HBoxContainer.new()
@@ -835,7 +1061,10 @@ func _build_battle_ui(names: Array[String]) -> void:
 		var fighter_box := VBoxContainer.new()
 		fighter_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		row.add_child(fighter_box)
-		var title := _label("%s · %s · %s" % [names[index], Catalog.AFFINITY_NAMES[Catalog.dominant_affinity(fighters[index].build)], fighters[index].personality_name], 13, TEAM_COLORS[index])
+		var title_text: String = names[index]
+		if game_mode != "kids":
+			title_text = "%s · %s · %s" % [names[index], Catalog.AFFINITY_NAMES[Catalog.dominant_affinity(fighters[index].build)], fighters[index].personality_name]
+		var title := _label(title_text, 17 if game_mode == "kids" else 13, TEAM_COLORS[index])
 		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		fighter_box.add_child(title)
 		var hp_bar := _health_bar(TEAM_COLORS[index])
@@ -864,10 +1093,10 @@ func _build_battle_ui(names: Array[String]) -> void:
 	controls.anchor_bottom = 0.98
 	controls.add_theme_constant_override("separation", 8)
 	ui_root.add_child(controls)
-	if game_mode != "lan":
+	if game_mode not in ["lan", "kids"]:
 		speed_button = _make_button("VELOCIDAD x1", _toggle_battle_speed, Color("9d88ff"), Vector2(150, 48))
 		controls.add_child(speed_button)
-	controls.add_child(_make_button("SALIR", _show_main_menu, Color("60759a"), Vector2(130, 48)))
+	controls.add_child(_make_button("MENÚ", _show_main_menu, Color("60759a"), Vector2(130, 48)))
 	var heavy_row := HBoxContainer.new()
 	heavy_row.anchor_left = 0.015
 	heavy_row.anchor_top = 0.87
@@ -885,7 +1114,11 @@ func _build_battle_ui(names: Array[String]) -> void:
 	else:
 		controllable.append(0)
 	for index in controllable:
-		var button := _make_button("USAR ARMA J%d" % (index + 1), _request_heavy.bind(index), TEAM_COLORS[index], Vector2(218, 60))
+		var button_text: String = "✨  SUPERPODER" if game_mode == "kids" else "USAR ARMA J%d" % (index + 1)
+		var button_size := Vector2(330, 76) if game_mode == "kids" else Vector2(218, 60)
+		var button := _make_button(button_text, _request_heavy.bind(index), Color("54c987") if game_mode == "kids" else TEAM_COLORS[index], button_size)
+		if game_mode == "kids":
+			button.add_theme_font_size_override("font_size", 23)
 		button.set_meta("fighter_index", index)
 		heavy_row.add_child(button)
 		heavy_buttons.append(button)
@@ -901,7 +1134,7 @@ func _trigger_heavy(fighter_index: int) -> void:
 		return
 	var fighter := fighters[fighter_index]
 	if is_instance_valid(fighter) and not fighter.request_heavy_attack():
-		_show_battle_message("HERRAMIENTA NO DISPONIBLE O RECARGANDO", Color("c4cfdd"))
+		_show_battle_message("¡ESPERA A QUE EL SUPERPODER ESTÉ LISTO!" if game_mode == "kids" else "HERRAMIENTA NO DISPONIBLE O RECARGANDO", Color("c4cfdd"))
 
 func _update_heavy_buttons() -> void:
 	for button in heavy_buttons:
@@ -913,8 +1146,11 @@ func _update_heavy_buttons() -> void:
 			button.disabled = true
 			continue
 		button.disabled = fighter.hp <= 0.0 or not fighter.has_manual_weapon()
-		var action_name := fighter.manual_action_label()
-		button.text = "%s J%d%s" % [action_name, fighter_index + 1, " · %.1fs" % fighter.heavy_cooldown if fighter.heavy_cooldown > 0.05 else " · ¡LISTO!"]
+		if game_mode == "kids":
+			button.text = "✨  SUPERPODER · %.1fs" % fighter.heavy_cooldown if fighter.heavy_cooldown > 0.05 else "✨  ¡SUPERPODER LISTO!"
+		else:
+			var action_name := fighter.manual_action_label()
+			button.text = "%s J%d%s" % [action_name, fighter_index + 1, " · %.1fs" % fighter.heavy_cooldown if fighter.heavy_cooldown > 0.05 else " · ¡LISTO!"]
 
 func _countdown() -> void:
 	var pitch := 0.82
@@ -934,7 +1170,8 @@ func _on_fighter_sfx(kind: String, pitch: float) -> void:
 		audio.play_sfx(kind, pitch)
 
 func _on_fighter_impact(strength: float, _impact_position: Vector3) -> void:
-	camera_shake = maxf(camera_shake, clampf(strength, 0.08, 0.46))
+	var shake_limit: float = 0.26 if game_mode == "kids" else 0.46
+	camera_shake = maxf(camera_shake, clampf(strength, 0.06, shake_limit))
 	if strength >= 0.28:
 		impact_focus_position = _impact_position
 		impact_focus_time = 0.52
@@ -982,7 +1219,7 @@ func _finish_by_time() -> void:
 	for fighter in fighters:
 		if is_instance_valid(fighter) and fighter.fighter_id != last_winner:
 			fighter.stop_fight()
-			fighter.model.set_damage_state(3)
+			fighter.model.set_damage_state(0)
 			fighter.model.play_defeat()
 	_complete_battle()
 
@@ -1002,22 +1239,31 @@ func _complete_battle() -> void:
 	if is_instance_valid(winner):
 		winner.model.play_victory()
 	last_reward = 0
-	if game_mode == "story":
+	if game_mode in ["story", "kids"]:
 		if last_winner == 0:
-			last_reward = 180 + cpu_level * 35
-			credits += last_reward
+			last_reward = 3 if game_mode == "kids" else 180 + cpu_level * 35
+			if game_mode == "kids":
+				kids_stars += last_reward
+			else:
+				credits += last_reward
 			total_wins += 1
 			cpu_level += 1
 			best_level = maxi(best_level, cpu_level)
 		else:
-			last_reward = 45
-			credits += last_reward
+			last_reward = 1 if game_mode == "kids" else 45
+			if game_mode == "kids":
+				kids_stars += last_reward
+			else:
+				credits += last_reward
 		_save_progress()
 	await get_tree().create_timer(1.15).timeout
 	if state == GameState.BATTLE:
 		_show_results()
 
 func _show_results() -> void:
+	if game_mode == "kids":
+		_show_kids_results()
+		return
 	state = GameState.RESULT
 	Engine.time_scale = 1.0
 	_clear_ui()
@@ -1053,7 +1299,7 @@ func _show_results() -> void:
 			box.add_child(_make_button("↻  REINTENTAR NIVEL %d" % cpu_level, _retry_cpu_battle, RED, Vector2(540, 64)))
 		box.add_child(_make_button("🔧  VOLVER AL TALLER", _rebuild_from_result, Color("9d88ff"), Vector2(540, 58)))
 	elif game_mode == "local":
-		var local_info := _label("Los robots pelearon con sus estadísticas, afinidades y piezas restantes.\nUsar la herramienta en el momento correcto puede cambiar toda la pelea.", 20, INK)
+		var local_info := _label("Los robots jugaron usando sus estadísticas, movimientos y poderes.\nActivar el superpoder en el momento correcto puede cambiar la partida.", 20, INK)
 		local_info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		box.add_child(local_info)
 		box.add_child(_make_button("↻  REVANCHA CON LOS MISMOS ROBOTS", _local_rematch, BLUE, Vector2(540, 64)))
@@ -1065,9 +1311,60 @@ func _show_results() -> void:
 		box.add_child(_make_button("📡  VOLVER A LA SALA LAN", _show_lan_lobby, Color("8edfa8"), Vector2(540, 60)))
 	box.add_child(_make_button("⌂  MENÚ PRINCIPAL", _show_main_menu, Color("60759a"), Vector2(540, 52)))
 
+func _show_kids_results() -> void:
+	state = GameState.RESULT
+	Engine.time_scale = 1.0
+	_clear_ui()
+	var victory: bool = last_winner == 0
+	var panel := _center_panel(Vector2(680.0, 620.0))
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 16)
+	panel.add_child(box)
+	box.add_child(_title_label("¡LO LOGRASTE!" if victory else "¡BUEN INTENTO!", 54, Color("72e39e") if victory else Color("ffe36e")))
+	var message_text: String = "¡Tu robot ganó el juego del nivel %d!" % (cpu_level - 1) if victory else "%s ganó esta vez. ¡Puedes probar otro robot!" % story_opponent_name
+	var message := _label(message_text, 23, INK)
+	message.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	message.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(message)
+	var stars := _title_label("+%d ⭐  ·  TIENES %d ESTRELLAS" % [last_reward, kids_stars], 25, GOLD)
+	box.add_child(stars)
+	var encouragement := _label("Cada robot es bueno en algo diferente. No hay una elección incorrecta.", 18, Color("ccecff"))
+	encouragement.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	encouragement.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	box.add_child(encouragement)
+	if victory:
+		box.add_child(_make_button("▶  SIGUIENTE AMIGO · NIVEL %d" % cpu_level, _next_cpu_battle, Color("54c987"), Vector2(560, 72)))
+	else:
+		box.add_child(_make_button("✨  AYÚDAME A ELEGIR", _kids_auto_help, Color("9d88ff"), Vector2(560, 72)))
+		box.add_child(_make_button("↻  JUGAR OTRA VEZ", _retry_cpu_battle, Color("54c987"), Vector2(560, 62)))
+	box.add_child(_make_button("🤖  ELEGIR OTRO ROBOT", _return_to_kids_builder, BLUE, Vector2(560, 58)))
+	box.add_child(_make_button("⌂  MENÚ", _show_main_menu, Color("60759a"), Vector2(560, 48)))
+
+func _best_kids_preset_against(opponent_build: Dictionary) -> int:
+	var best_index: int = 0
+	var best_chance: float = -1.0
+	for index in range(KIDS_PRESETS.size()):
+		var candidate: Dictionary = KIDS_PRESETS[index]
+		var prediction: Dictionary = _kids_prediction_for(candidate, opponent_build)
+		var chance: float = float(prediction.player)
+		if chance > best_chance:
+			best_chance = chance
+			best_index = index
+	return best_index
+
+func _kids_auto_help() -> void:
+	kids_preset_index = _best_kids_preset_against(story_opponent_build)
+	var selected_build: Dictionary = KIDS_PRESETS[kids_preset_index]
+	current_build = selected_build.duplicate(true)
+	player_builds.clear()
+	if audio:
+		audio.play_sfx("unlock", 1.02)
+	_show_kids_builder()
+
 func _next_cpu_battle() -> void:
 	story_opponent_build.clear()
 	story_opponent_level = -1
+	story_opponent_mode = ""
 	_show_story_opponent_preview()
 
 func _retry_cpu_battle() -> void:
@@ -1156,14 +1453,13 @@ func _show_help() -> void:
 	panel.add_child(box)
 	box.add_child(_title_label("CÓMO SE JUEGA", 40, GOLD))
 	var help := _label(
-		"1. ARMA Y REVISA LAS 10 BARRAS\nVida, daño, blindaje, movimiento, ataque, alcance, energía, precisión, estabilidad y peso cambian con cada pieza.\n\n" +
-		"2. USA LAS AFINIDADES\nHidráulico > Térmico > Criógeno > Mineral > Eléctrico > Hidráulico. Una ventaja causa más daño.\n\n" +
-		"3. HISTORIA Y TIENDA\nGana créditos peleando contra la CPU y toca una pieza bloqueada para comprarla.\n\n" +
-		"4. USA TU HERRAMIENTA\nEl botón activa el arma equipada contra una unión. Puede desprender armas, brazos o cabeza; nunca piernas ni torso. Cada pérdida reduce estadísticas.\n\n" +
-		"5. RITMO DEL COMBATE\nLa pelea base es pesada y mecánica. En Historia y VS local puedes alternar VELOCIDAD x1/x2.\n\n" +
-		"6. ANALIZA Y ADAPTA\nAntes de cada pelea de Historia ves al rival, sus 10 estadísticas, afinidad, personalidad y posibilidades. Si pierdes, la IA mecánica puede armar tu mejor combinación desbloqueada.\n\n" +
-		"VS Y LAN\nEn VS están las 160 piezas desbloqueadas. En LAN pueden conectar de 2 a 4 teléfonos al mismo Wi-Fi.",
-		16,
+		"MODO FÁCIL · SOLO 3 PASOS\n\n" +
+		"1  ELIGE UN ROBOT\nEstrella es equilibrado, Rayito es rápido, Fortachón tiene mucha vida e Inventor usa buenos poderes.\n\n" +
+		"2  CONOCE A TU RIVAL\nLos puntos muestran quién tiene más vida, fuerza y rapidez.\n\n" +
+		"3  ¡JUEGA!\nLos robots se mueven solos. Toca el botón verde SUPERPODER cuando diga LISTO.\n\n" +
+		"SI NO GANAS\nNo pasa nada. Toca AYÚDAME A ELEGIR y el juego recomendará el robot más conveniente.\n\n" +
+		"MÁS OPCIONES\nTaller avanzado permite construir pieza por pieza. También hay dos jugadores y modo Wi-Fi. Todos los modos de esta edición usan destellos de colores y conservan sus piezas.",
+		18,
 		INK
 	)
 	help.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -1407,6 +1703,7 @@ func _save_progress() -> void:
 	config.set_value("progress", "current_level", cpu_level)
 	config.set_value("progress", "total_wins", total_wins)
 	config.set_value("progress", "credits", credits)
+	config.set_value("progress", "kids_stars", kids_stars)
 	for slot in Catalog.SLOTS:
 		config.set_value("unlocks", slot, unlocked_parts.get(slot, [0, 1, 2, 3]))
 	config.save("user://forja_infinita_save.cfg")
@@ -1419,6 +1716,7 @@ func _load_progress() -> void:
 		cpu_level = maxi(1, int(config.get_value("progress", "current_level", 1)))
 		total_wins = maxi(0, int(config.get_value("progress", "total_wins", 0)))
 		credits = maxi(0, int(config.get_value("progress", "credits", 600)))
+		kids_stars = maxi(0, int(config.get_value("progress", "kids_stars", 0)))
 		for slot in Catalog.SLOTS:
 			var saved: Array = config.get_value("unlocks", slot, [0, 1, 2, 3])
 			unlocked_parts[slot] = saved.duplicate()
@@ -1482,6 +1780,8 @@ func _run_smoke_test() -> void:
 	var fighter_test_b := FighterScript.new()
 	add_child(fighter_test_a)
 	add_child(fighter_test_b)
+	fighter_test_a.friendly_mode = true
+	fighter_test_b.friendly_mode = true
 	fighter_test_a.setup_robot(maximum_build, BLUE, 1.0, 0, "PRUEBA A")
 	fighter_test_b.setup_robot(Catalog.empty_build(), RED, 0.75, 1, "PRUEBA B")
 	passed = passed and fighter_test_a.personality_id in range(4)
@@ -1495,8 +1795,9 @@ func _run_smoke_test() -> void:
 	passed = passed and fighter_test_b.hp < hp_before
 	var parts_before: int = fighter_test_b.model.part_roots.size()
 	fighter_test_b.take_tool_hit(200.0, fighter_test_a.global_position, 2, true)
-	passed = passed and fighter_test_b.model.part_roots.size() < parts_before
-	var preview_prediction := _story_prediction_for(maximum_build, Catalog.empty_build())
+	passed = passed and fighter_test_b.model.part_roots.size() == parts_before
+	passed = passed and KIDS_PRESETS.size() == 4 and KIDS_ROBOT_NAMES.size() == 4
+	var preview_prediction := _kids_prediction_for(maximum_build, Catalog.empty_build())
 	passed = passed and float(preview_prediction.player) > 0.0 and float(preview_prediction.cpu) > 0.0
-	print("FORJA_SMOKE_TEST:", "PASS" if passed else "FAIL", " slots=", Catalog.SLOTS.size(), " options=160 stats=10 affinities=5 LAN=4 combat=OK contact=OK advisor=OK")
+	print("FORJA_KIDS_SMOKE_TEST:", "PASS" if passed else "FAIL", " presets=4 pieces_safe=OK simple_ui=OK superpower=OK LAN=4")
 	get_tree().quit(0 if passed else 1)

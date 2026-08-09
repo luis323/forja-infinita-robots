@@ -1,7 +1,7 @@
 #!/data/data/com.termux/files/usr/bin/bash
 set -e
 
-echo "FORJA INFINITA v1.4.1 - SUBIR Y COMPILAR"
+echo "FORJA INFINITA ROBOTS KIDS v1.5.0 - SUBIR Y COMPILAR"
 
 if [ ! -f project.godot ]; then
   echo "ERROR: abre Termux dentro de la carpeta que contiene project.godot."
@@ -29,7 +29,7 @@ cd "$repo_dir"
 git config user.name "Leonardo"
 git config user.email "leonardo@termux.local"
 git add -A
-git commit -m "Forja Infinita Robots v1.4.1 - corregir tipado Godot 4.4.1" || true
+git commit -m "Forja Infinita Robots Kids v1.5.0" || true
 git push origin main
 
 echo

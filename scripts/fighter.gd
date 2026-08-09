@@ -52,6 +52,7 @@ var joint_maximum := {}
 var personality_id := 0
 var personality_name := "AGRESIVO"
 var auto_tool_enabled := false
+var friendly_mode := true
 var _auto_tool_timer := 4.0
 var _personality_timer := 1.8
 var _personality_actions := 0
@@ -128,7 +129,7 @@ func request_heavy_attack() -> bool:
 	_next_manual_left = not _manual_use_left
 	_manual_heavy_requested = true
 	heavy_cooldown = clampf(6.8 - float(stats.energy) * 0.012, 4.6, 6.0)
-	combat_event.emit("%s PREPARA %s" % [display_name, _action_label_for_side(_manual_use_left)], team_color)
+	combat_event.emit("¡%s CARGA SU SUPERPODER!" % display_name if friendly_mode else "%s PREPARA %s" % [display_name, _action_label_for_side(_manual_use_left)], team_color)
 	return true
 
 func has_manual_weapon() -> bool:
@@ -329,13 +330,13 @@ func _perform_attack(distance: float) -> void:
 		damage *= 0.72 if has_arm else 0.42
 	if special:
 		damage *= 1.58
-		combat_event.emit("¡%s activa SOBRECARGA!" % display_name, team_color)
+		combat_event.emit("¡%s ACTIVA PODER ESTRELLA!" % display_name if friendly_mode else "¡%s activa SOBRECARGA!" % display_name, team_color)
 	if attack_count % 8 == 0:
 		damage *= 1.45
-		combat_event.emit("¡GOLPE CRÍTICO!", Color("fff173"))
+		combat_event.emit("¡GOLPE SÚPER!" if friendly_mode else "¡GOLPE CRÍTICO!", Color("fff173"))
 	var accuracy_roll := float((attack_count * 37 + fighter_id * 19) % 100)
 	if not special and accuracy_roll > float(stats.accuracy):
-		combat_event.emit("%s FALLA EL ATAQUE" % display_name, Color("d7e1ef"))
+		combat_event.emit("¡CASI, %s!" % display_name if friendly_mode else "%s FALLA EL ATAQUE" % display_name, Color("d7e1ef"))
 		model.play_attack(use_left, false)
 		attack_cooldown = maxf(0.42, 1.46 / float(stats.attack_speed))
 		return
@@ -344,9 +345,9 @@ func _perform_attack(distance: float) -> void:
 	var affinity_bonus := Catalog.affinity_multiplier(attack_affinity, defend_affinity)
 	damage *= affinity_bonus
 	if affinity_bonus > 1.2:
-		combat_event.emit("¡VENTAJA %s!" % Catalog.AFFINITY_NAMES[attack_affinity], Catalog.AFFINITY_COLORS[attack_affinity])
+		combat_event.emit("¡BUENA COMBINACIÓN!" if friendly_mode else "¡VENTAJA %s!" % Catalog.AFFINITY_NAMES[attack_affinity], Catalog.AFFINITY_COLORS[attack_affinity])
 	elif affinity_bonus < 0.8:
-		combat_event.emit("ATAQUE POCO EFECTIVO", Color("b9c5d7"))
+		combat_event.emit("¡PRUEBA OTRA IDEA!" if friendly_mode else "ATAQUE POCO EFECTIVO", Color("b9c5d7"))
 	if has_arm:
 		model.play_attack(use_left, special)
 	else:
@@ -389,7 +390,7 @@ func _perform_manual_heavy() -> void:
 	rush.y = 0.0
 	if rush.length() > 0.05:
 		_impulse_velocity += rush.normalized() * 10.5
-	combat_event.emit("¡%s USA SU HERRAMIENTA!" % display_name, team_color)
+	combat_event.emit("¡%s USA SU SUPERPODER!" % display_name if friendly_mode else "¡%s USA SU HERRAMIENTA!" % display_name, team_color)
 	get_tree().create_timer(0.42).timeout.connect(_resolve_tool_hit.bind(opponent, damage, weapon_index, use_left))
 	attack_cooldown = 1.05
 
@@ -440,6 +441,12 @@ func _resolve_combo_hit(victim: ArenaFighter, damage: float, source_position: Ve
 
 func take_tool_hit(raw_damage: float, source_position: Vector3, weapon_index: int, attacker_used_left: bool) -> void:
 	if not active or hp <= 0.0:
+		return
+	if friendly_mode:
+		var friendly_contact := model.get_part_world_position("torso") + Vector3(0.0, 0.18, 0.32)
+		take_damage(raw_damage * 0.90, source_position, true, friendly_contact)
+		if hp > 0.0:
+			combat_event.emit("¡SUPEREMPUJÓN DE COLORES!", Color("ffe36e"))
 		return
 	var target_slot := _choose_joint_target(weapon_index, attacker_used_left)
 	var impact_position := model.get_part_world_position(target_slot) if not target_slot.is_empty() else model.get_part_world_position("torso")
@@ -519,7 +526,7 @@ func take_damage(raw_damage: float, source_position: Vector3, heavy: bool, conta
 	var strong_push := heavy or _received_hits % 4 == 0
 	model.play_hit(strong_push)
 	var damage_ratio := 1.0 - hp / max_hp
-	model.set_damage_state(3 if damage_ratio >= 0.78 else (2 if damage_ratio >= 0.52 else (1 if damage_ratio >= 0.25 else 0)))
+	model.set_damage_state(0 if friendly_mode else (3 if damage_ratio >= 0.78 else (2 if damage_ratio >= 0.52 else (1 if damage_ratio >= 0.25 else 0))))
 	sfx_requested.emit("heavy" if heavy else "hit", 0.92 + _rng.randf_range(-0.07, 0.08))
 	var actual_contact: Vector3 = contact_position if contact_position != Vector3.ZERO else global_position + Vector3(0.0, 2.2, 0.0)
 	impact.emit(0.42 if heavy else (0.30 if strong_push else 0.20), actual_contact)
@@ -538,7 +545,7 @@ func take_damage(raw_damage: float, source_position: Vector3, heavy: bool, conta
 		active = false
 		velocity = Vector3.ZERO
 		model.play_defeat()
-		combat_event.emit("%s queda fuera de combate" % display_name, team_color.lightened(0.2))
+		combat_event.emit("¡%s SE TOMA UN DESCANSO!" % display_name if friendly_mode else "%s queda fuera de combate" % display_name, team_color.lightened(0.2))
 		defeated.emit(fighter_id)
 
 func force_defeat() -> void:
@@ -547,7 +554,7 @@ func force_defeat() -> void:
 	hp = 0.0
 	active = false
 	health_changed.emit(fighter_id, 0.0, hp, max_hp)
-	model.set_damage_state(3)
+	model.set_damage_state(0 if friendly_mode else 3)
 	model.play_defeat()
 	defeated.emit(fighter_id)
 
@@ -581,7 +588,7 @@ func _launch_energy_orb(victim: ArenaFighter, damage: float, heavy: bool) -> voi
 	)
 
 func _spawn_impact_sparks(heavy: bool, contact_position: Vector3) -> void:
-	var spark_count := 26 if heavy else 13
+	var spark_count := (32 if heavy else 16) if friendly_mode else (26 if heavy else 13)
 	for index in range(spark_count):
 		var spark := MeshInstance3D.new()
 		var sphere := SphereMesh.new()
@@ -590,9 +597,13 @@ func _spawn_impact_sparks(heavy: bool, contact_position: Vector3) -> void:
 		sphere.radial_segments = 6
 		sphere.rings = 3
 		var material := StandardMaterial3D.new()
-		material.albedo_color = Color("fff27a")
+		var spark_color: Color = Color("fff27a")
+		if friendly_mode:
+			var rainbow_index: int = index % 5
+			spark_color = [Color("53d8ff"), Color("ffe36e"), Color("78dca0"), Color("ff8bba"), Color("c58cff")][rainbow_index]
+		material.albedo_color = spark_color
 		material.emission_enabled = true
-		material.emission = Color("ff9d45") * 2.0
+		material.emission = spark_color * 2.0 if friendly_mode else Color("ff9d45") * 2.0
 		sphere.material = material
 		spark.mesh = sphere
 		get_parent().add_child(spark)

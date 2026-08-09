@@ -105,21 +105,20 @@ jobs:
         run: |
           mkdir -p "$GITHUB_WORKSPACE/build"
           "$GODOT_BIN" --headless --path "$GITHUB_WORKSPACE" \
-            --export-debug "Android" "$GITHUB_WORKSPACE/build/ForjaInfinita-debug.apk"
+            --export-debug "Android" "$GITHUB_WORKSPACE/build/ForjaInfinitaKids-debug.apk"
 
       - name: Comprobar APK
         shell: bash
         run: |
-          test -s build/ForjaInfinita-debug.apk
-          sha256sum build/ForjaInfinita-debug.apk > build/ForjaInfinita-debug.apk.sha256
+          test -s build/ForjaInfinitaKids-debug.apk
+          sha256sum build/ForjaInfinitaKids-debug.apk > build/ForjaInfinitaKids-debug.apk.sha256
 
       - name: Publicar APK descargable
         uses: actions/upload-artifact@v4
         with:
-          name: ForjaInfinita-Android-debug
+          name: ForjaInfinitaKids-Android-debug
           path: |
-            build/ForjaInfinita-debug.apk
-            build/ForjaInfinita-debug.apk.sha256
+            build/ForjaInfinitaKids-debug.apk
+            build/ForjaInfinitaKids-debug.apk.sha256
           if-no-files-found: error
           retention-days: 30
-
