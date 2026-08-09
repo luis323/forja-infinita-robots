@@ -16,6 +16,7 @@ var stats := {}
 var hp := 1.0
 var max_hp := 1.0
 var opponent: ArenaFighter
+var opponents: Array[ArenaFighter] = []
 var model: RobotModel
 var active := false
 var attack_cooldown := 0.0
@@ -30,6 +31,9 @@ var _impulse_velocity := Vector3.ZERO
 var _step_timer := 0.0
 var _maneuver_timer := 1.0
 var _motion_time := 0.0
+var _target_timer := 0.0
+var heavy_cooldown := 0.0
+var _manual_heavy_requested := false
 
 func setup_robot(new_build: Dictionary, tint: Color, stat_multiplier: float, new_id: int, robot_name: String) -> void:
 	fighter_id = new_id
@@ -43,8 +47,11 @@ func setup_robot(new_build: Dictionary, tint: Color, stat_multiplier: float, new
 	stats.energy *= stat_multiplier
 	max_hp = float(stats.health)
 	hp = max_hp
-	_rng.seed = int(Time.get_ticks_usec()) + new_id * 7919 + int(max_hp)
-	think_offset = _rng.randf_range(0.0, 0.45)
+	var deterministic_seed := 1171 + new_id * 7919
+	for slot in Catalog.SLOTS:
+		deterministic_seed = deterministic_seed * 31 + int(build.get(slot, 0)) * 97
+	_rng.seed = deterministic_seed
+	think_offset = float(abs(deterministic_seed) % 40) / 100.0
 	_strafe_direction = -1.0 if _rng.randi() % 2 == 0 else 1.0
 	model = RobotModelScript.new()
 	add_child(model)
@@ -61,10 +68,27 @@ func setup_robot(new_build: Dictionary, tint: Color, stat_multiplier: float, new
 
 func set_opponent(value: ArenaFighter) -> void:
 	opponent = value
+	opponents.clear()
+	if is_instance_valid(value):
+		opponents.append(value)
+
+func set_opponents(values: Array[ArenaFighter]) -> void:
+	opponents = values.duplicate()
+	_choose_target()
+
+func request_heavy_attack() -> bool:
+	if not active or hp <= 0.0 or heavy_cooldown > 0.0:
+		return false
+	_manual_heavy_requested = true
+	heavy_cooldown = clampf(6.8 - float(stats.energy) * 0.012, 4.6, 6.0)
+	combat_event.emit("%s PREPARA GOLPE FUERTE" % display_name, team_color)
+	return true
 
 func begin_fight() -> void:
 	active = true
 	attack_cooldown = 0.65 + think_offset
+	heavy_cooldown = 0.0
+	_manual_heavy_requested = false
 	_maneuver_timer = 0.8 + think_offset
 	model.set_moving(false)
 
@@ -76,10 +100,18 @@ func stop_fight() -> void:
 		model.set_moving(false)
 
 func _physics_process(delta: float) -> void:
-	if not active or not is_instance_valid(opponent) or opponent.hp <= 0.0:
+	if not active:
 		velocity = Vector3.ZERO
 		return
 	attack_cooldown = maxf(0.0, attack_cooldown - delta)
+	heavy_cooldown = maxf(0.0, heavy_cooldown - delta)
+	_target_timer = maxf(0.0, _target_timer - delta)
+	if _target_timer <= 0.0 or not is_instance_valid(opponent) or opponent.hp <= 0.0:
+		_choose_target()
+		_target_timer = 0.30
+	if not is_instance_valid(opponent) or opponent.hp <= 0.0:
+		velocity = Vector3.ZERO
+		return
 	_step_timer = maxf(0.0, _step_timer - delta)
 	_maneuver_timer = maxf(0.0, _maneuver_timer - delta)
 	_motion_time += delta
@@ -91,7 +123,9 @@ func _physics_process(delta: float) -> void:
 		look_at(opponent.global_position, Vector3.UP, true)
 	var preferred_range := clampf(float(stats.range) * 0.70, 1.75, 5.4)
 	var move_direction := Vector3.ZERO
-	if distance > preferred_range:
+	if _manual_heavy_requested and distance > float(stats.range) * 1.22:
+		move_direction = difference.normalized() * 1.42
+	elif distance > preferred_range:
 		move_direction = difference.normalized()
 	elif distance < preferred_range * 0.58:
 		move_direction = -difference.normalized() * 0.72
@@ -113,8 +147,22 @@ func _physics_process(delta: float) -> void:
 	if walking and _step_timer <= 0.0:
 		sfx_requested.emit("step", 0.88 + float(fighter_id) * 0.10 + _rng.randf_range(-0.04, 0.04))
 		_step_timer = clampf(0.48 - float(stats.speed) * 0.025, 0.24, 0.40)
-	if attack_cooldown <= 0.0 and distance <= float(stats.range):
+	if _manual_heavy_requested and distance <= float(stats.range) * 1.22:
+		_perform_manual_heavy()
+	elif attack_cooldown <= 0.0 and distance <= float(stats.range):
 		_perform_attack(distance)
+
+func _choose_target() -> void:
+	var nearest: ArenaFighter
+	var nearest_distance := INF
+	for candidate in opponents:
+		if not is_instance_valid(candidate) or candidate == self or candidate.hp <= 0.0:
+			continue
+		var distance := global_position.distance_squared_to(candidate.global_position)
+		if distance < nearest_distance:
+			nearest = candidate
+			nearest_distance = distance
+	opponent = nearest
 
 func _perform_attack(distance: float) -> void:
 	if not is_instance_valid(opponent) or opponent.hp <= 0.0:
@@ -123,13 +171,28 @@ func _perform_attack(distance: float) -> void:
 	var use_left := attack_count % 2 == 0
 	var special_every := maxi(3, 7 - int(float(stats.energy) / 55.0))
 	var special := attack_count % special_every == 0
-	var damage := float(stats.power) * _rng.randf_range(0.82, 1.16)
+	var damage_variation := 0.96 + float((attack_count * 13 + fighter_id * 5) % 9) * 0.01
+	var damage := float(stats.power) * damage_variation
 	if special:
 		damage *= 1.58
 		combat_event.emit("¡%s activa SOBRECARGA!" % display_name, team_color)
-	if _rng.randf() < 0.11:
+	if attack_count % 8 == 0:
 		damage *= 1.45
 		combat_event.emit("¡GOLPE CRÍTICO!", Color("fff173"))
+	var accuracy_roll := float((attack_count * 37 + fighter_id * 19) % 100)
+	if not special and accuracy_roll > float(stats.accuracy):
+		combat_event.emit("%s FALLA EL ATAQUE" % display_name, Color("d7e1ef"))
+		model.play_attack(use_left, false)
+		attack_cooldown = maxf(0.28, 1.12 / float(stats.attack_speed))
+		return
+	var attack_affinity := Catalog.weapon_affinity(build, use_left)
+	var defend_affinity := Catalog.dominant_affinity(opponent.build)
+	var affinity_bonus := Catalog.affinity_multiplier(attack_affinity, defend_affinity)
+	damage *= affinity_bonus
+	if affinity_bonus > 1.2:
+		combat_event.emit("¡VENTAJA %s!" % Catalog.AFFINITY_NAMES[attack_affinity], Catalog.AFFINITY_COLORS[attack_affinity])
+	elif affinity_bonus < 0.8:
+		combat_event.emit("ATAQUE POCO EFECTIVO", Color("b9c5d7"))
 	model.play_attack(use_left, special)
 	var is_ranged := float(stats.range) >= 4.35 and distance > 2.3
 	if is_ranged:
@@ -144,10 +207,29 @@ func _perform_attack(distance: float) -> void:
 		opponent.take_damage(damage, global_position, special)
 		if attack_count % 4 == 0 and not special:
 			get_tree().create_timer(0.14).timeout.connect(_combo_strike.bind(opponent, damage * 0.34, global_position))
-	var speed_factor := clampf((float(stats.speed) - 3.0) * 0.055, 0.0, 0.38)
-	attack_cooldown = maxf(0.38, 1.18 - speed_factor)
+	attack_cooldown = maxf(0.28, 1.12 / float(stats.attack_speed))
 	if special:
 		attack_cooldown += 0.28
+
+func _perform_manual_heavy() -> void:
+	if not is_instance_valid(opponent) or opponent.hp <= 0.0:
+		_manual_heavy_requested = false
+		return
+	_manual_heavy_requested = false
+	attack_count += 1
+	var use_left := attack_count % 2 == 0
+	var attack_affinity := Catalog.weapon_affinity(build, use_left)
+	var defend_affinity := Catalog.dominant_affinity(opponent.build)
+	var damage := float(stats.power) * 2.05 * Catalog.affinity_multiplier(attack_affinity, defend_affinity)
+	model.play_attack(use_left, true)
+	sfx_requested.emit("heavy", 0.82)
+	var rush := opponent.global_position - global_position
+	rush.y = 0.0
+	if rush.length() > 0.05:
+		_impulse_velocity += rush.normalized() * 8.5
+	opponent.take_damage(damage, global_position, true)
+	combat_event.emit("¡GOLPE FUERTE DE %s!" % display_name, team_color)
+	attack_cooldown = 0.82
 
 func _combo_strike(victim: ArenaFighter, damage: float, source_position: Vector3) -> void:
 	if not active or not is_instance_valid(victim) or victim.hp <= 0.0:
@@ -169,7 +251,8 @@ func take_damage(raw_damage: float, source_position: Vector3, heavy: bool) -> vo
 	var away := global_position - source_position
 	away.y = 0.0
 	if away.length() > 0.05:
-		_impulse_velocity += away.normalized() * (7.2 if heavy else 3.5)
+		var stability_factor := clampf(1.18 - float(stats.stability) / 105.0, 0.32, 1.0)
+		_impulse_velocity += away.normalized() * (7.2 if heavy else 3.5) * stability_factor
 	health_changed.emit(fighter_id, hp / max_hp, hp, max_hp)
 	if hp <= 0.0:
 		active = false

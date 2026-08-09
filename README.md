@@ -10,6 +10,10 @@ Construyes un robot sobre un pedestal y después lo ves pelear automáticamente 
 
 - 8 espacios independientes: cabeza, torso, brazo izquierdo, brazo derecho, pierna izquierda, pierna derecha y un arma para cada mano.
 - 20 opciones en cada espacio: 160 elecciones catalogadas y 25.600.000.000 combinaciones posibles.
+- Diez barras que cambian al instante: vida, daño, blindaje, movimiento, velocidad de ataque, alcance, energía, precisión, estabilidad y peso.
+- Miniaturas 2D propias para reconocer visualmente cada cabeza, torso, brazo, pierna y arma antes de seleccionarla.
+- Cinco afinidades en ciclo: Hidráulico vence a Térmico; Eléctrico a Hidráulico; Mineral a Eléctrico; Criógeno a Mineral; Térmico a Criógeno.
+- Cálculo de combate basado en estructura efectiva, daño por segundo, precisión, movilidad, alcance, estabilidad, peso, sinergia y ventaja de afinidad.
 - Piezas originales inspiradas en grandes arquetipos de robots, ciencia ficción y superhéroes, sin copiar personajes existentes.
 - Siluetas realmente distintas: brazos cortos, largos, delgados o pesados; ruedas, orugas, patas articuladas, visores, antenas, garras y accesorios únicos.
 - El robot se actualiza y sus piezas vuelan hacia el pedestal al seleccionarlas.
@@ -18,6 +22,10 @@ Construyes un robot sobre un pedestal y después lo ves pelear automáticamente 
 - Tiempos de construcción de 30 segundos, 1 minuto, 2 minutos o sin límite.
 - Arena CPU infinita: empieza fácil, desbloquea más variedad y aumenta su potencia sin límite.
 - Multijugador local por turnos para 2 personas.
+- Multijugador LAN de 2 a 4 teléfonos en el mismo Wi-Fi mediante IP local y puerto 27841.
+- Golpe fuerte manual por jugador: persigue al objetivo, impacta de forma garantizada al alcanzarlo y después entra en recarga.
+- Modo Historia con créditos, recompensas por victoria o intento, precios y compras guardadas.
+- En VS local y LAN las 160 piezas están desbloqueadas desde el principio.
 - Combate automático dinámico con persecución, esquivas, embestidas, golpes encadenados, ataques a distancia, críticos, sobrecargas, retroceso y límite de tiempo.
 - Animación de hombros, codos, caderas y rodillas, orientación correcta hacia el rival, cámara móvil, destellos y sacudida en impactos.
 - Música de pelea y efectos de interfaz, montaje, pasos, ataques, disparos, impactos y resultados; todo se genera dentro del juego y no depende de archivos externos.
@@ -52,6 +60,8 @@ El flujo valida el proyecto, ejecuta una prueba interna del catálogo y del mont
 - `scripts/robot_model.gd`: construcción visual procedural y animaciones.
 - `scripts/fighter.gd`: inteligencia de combate automático.
 - `scripts/robot_audio.gd`: música y efectos generados por código.
+- `scripts/part_thumbnail.gd`: miniaturas procedurales del selector.
+- `scripts/lan_manager.gd`: sala LAN, intercambio de robots e instrucciones de golpe fuerte.
 - `scenes/main.tscn`: escena de arranque mínima.
 - `.github/workflows/build-android.yml`: compilación automática del APK.
 

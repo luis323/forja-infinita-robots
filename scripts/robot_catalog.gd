@@ -52,8 +52,8 @@ const LEG_NAMES := [
 ]
 
 const WEAPON_NAMES := [
-	"Martillo de Pulso", "Espada Fotónica", "Guante de Choque", "Cañón Burbuja", "Sierra Circular",
-	"Lanza Magnética", "Rayo Congelante", "Yoyó de Acero", "Taladro Cohete", "Escudo Búmeran",
+	"Martillo de Pulso", "Espada Fotónica", "Tijera Industrial", "Cañón Burbuja", "Sierra Circular",
+	"Lanza Magnética", "Rayo Congelante", "Pala Cinética", "Taladro Cohete", "Escudo Búmeran",
 	"Maza Gravitatoria", "Bláster Solar", "Látigo Eléctrico", "Hacha de Plasma", "Puño Extensible",
 	"Cañón de Red", "Lanza Cometa", "Disco Prisma", "Imán Demoledor", "Orbe Vectorial",
 ]
@@ -66,6 +66,55 @@ const TRAITS := [
 ]
 
 const FAMILIES := ["taller", "solar", "fortaleza", "veloz", "elástico"]
+
+const AFFINITIES := ["thermal", "hydraulic", "electric", "mineral", "cryo"]
+const AFFINITY_NAMES := {
+	"thermal": "TÉRMICO",
+	"hydraulic": "HIDRÁULICO",
+	"electric": "ELÉCTRICO",
+	"mineral": "MINERAL",
+	"cryo": "CRIÓGENO",
+}
+const AFFINITY_COLORS := {
+	"thermal": Color("ff6b4a"),
+	"hydraulic": Color("48baff"),
+	"electric": Color("ffe64d"),
+	"mineral": Color("b49372"),
+	"cryo": Color("9ff5ff"),
+}
+const AFFINITY_BEATS := {
+	"thermal": "cryo",
+	"cryo": "mineral",
+	"mineral": "electric",
+	"electric": "hydraulic",
+	"hydraulic": "thermal",
+}
+
+const STAT_KEYS := ["health", "power", "armor", "speed", "attack_speed", "range", "energy", "accuracy", "stability", "weight"]
+const STAT_LABELS := {
+	"health": "VIDA",
+	"power": "DAÑO",
+	"armor": "BLINDAJE",
+	"speed": "MOVIMIENTO",
+	"attack_speed": "VEL. ATAQUE",
+	"range": "ALCANCE",
+	"energy": "ENERGÍA",
+	"accuracy": "PRECISIÓN",
+	"stability": "ESTABILIDAD",
+	"weight": "PESO",
+}
+const STAT_RANGES := {
+	"health": Vector2(600.0, 1250.0),
+	"power": Vector2(70.0, 180.0),
+	"armor": Vector2(20.0, 80.0),
+	"speed": Vector2(2.4, 8.5),
+	"attack_speed": Vector2(0.55, 2.25),
+	"range": Vector2(2.0, 8.0),
+	"energy": Vector2(65.0, 190.0),
+	"accuracy": Vector2(50.0, 98.0),
+	"stability": Vector2(15.0, 90.0),
+	"weight": Vector2(55.0, 230.0),
+}
 
 static func empty_build() -> Dictionary:
 	var build := {}
@@ -105,14 +154,19 @@ static func get_option(slot: String, index: int) -> Dictionary:
 		"name": names[safe_index],
 		"trait": TRAITS[safe_index],
 		"family": FAMILIES[pulse],
+		"affinity": AFFINITIES[pulse],
 		"shape": safe_index % 7,
-		"color": Color.from_hsv(fmod(0.53 + float(safe_index) * 0.071, 1.0), 0.68, 0.95),
+		"color": AFFINITY_COLORS[AFFINITIES[pulse]].lerp(Color.from_hsv(fmod(0.53 + float(safe_index) * 0.071, 1.0), 0.68, 0.95), 0.24),
 		"health": 0.0,
 		"power": 0.0,
 		"armor": 0.0,
 		"speed": 0.0,
 		"range": 0.0,
 		"energy": 0.0,
+		"attack_speed": 0.0,
+		"accuracy": 0.0,
+		"stability": 0.0,
+		"weight": 0.0,
 	}
 	match slot:
 		"head":
@@ -122,12 +176,20 @@ static func get_option(slot: String, index: int) -> Dictionary:
 			option.speed = 0.15 + (4 - pulse) * 0.05
 			option.range = 0.25 + pulse * 0.18
 			option.energy = 8.0 + tier * 3.0 + pulse
+			option.attack_speed = 0.04 + (4 - pulse) * 0.015
+			option.accuracy = 5.0 + tier * 1.4 + pulse * 0.8
+			option.stability = 1.0 + tier * 1.2
+			option.weight = 5.0 + tier * 1.8 + pulse * 0.4
 		"torso":
 			option.health = 78.0 + tier * 25.0 + pulse * 5.0
 			option.power = 3.0 + tier * 1.8
 			option.armor = 5.0 + tier * 2.2 + pulse * 0.6
 			option.speed = 0.03 + (4 - pulse) * 0.02
 			option.energy = 15.0 + tier * 8.0
+			option.attack_speed = 0.02 + (4 - pulse) * 0.01
+			option.accuracy = 1.0 + pulse * 0.6
+			option.stability = 8.0 + tier * 3.0 + pulse
+			option.weight = 22.0 + tier * 7.0 + pulse * 2.0
 		"left_arm", "right_arm":
 			option.health = 28.0 + tier * 9.0
 			option.power = 5.0 + tier * 2.4 + pulse * 1.0
@@ -135,12 +197,20 @@ static func get_option(slot: String, index: int) -> Dictionary:
 			option.speed = 0.10 + (4 - pulse) * 0.04
 			option.range = 0.12 + pulse * 0.08
 			option.energy = 3.0 + tier * 2.0
+			option.attack_speed = 0.07 + (4 - pulse) * 0.025
+			option.accuracy = 2.0 + pulse * 0.9
+			option.stability = 2.0 + tier * 1.2
+			option.weight = 7.0 + tier * 3.0 + pulse
 		"left_leg", "right_leg":
 			option.health = 35.0 + tier * 10.0
 			option.power = 1.0 + tier
 			option.armor = 2.0 + tier * 1.3 + pulse * 0.4
 			option.speed = 0.32 + tier * 0.10 + (4 - pulse) * 0.06
 			option.energy = 2.0 + tier * 1.5
+			option.attack_speed = 0.02 + (4 - pulse) * 0.012
+			option.accuracy = 0.5 + pulse * 0.4
+			option.stability = 4.0 + tier * 2.0 + pulse
+			option.weight = 9.0 + tier * 3.5 + pulse * 1.2
 		"left_weapon", "right_weapon":
 			option.health = 8.0 + tier * 4.0
 			option.power = 9.0 + tier * 4.0 + pulse * 1.7
@@ -148,6 +218,10 @@ static func get_option(slot: String, index: int) -> Dictionary:
 			option.speed = 0.06 + (4 - pulse) * 0.04
 			option.range = 0.35 + pulse * 0.25 + tier * 0.10
 			option.energy = 5.0 + tier * 3.0
+			option.attack_speed = 0.10 + (4 - pulse) * 0.035
+			option.accuracy = 3.0 + tier * 1.2 + pulse
+			option.stability = 1.0 + tier * 0.8
+			option.weight = 6.0 + tier * 3.0 + pulse * 0.8
 	return option
 
 static func build_stats(build: Dictionary) -> Dictionary:
@@ -158,6 +232,10 @@ static func build_stats(build: Dictionary) -> Dictionary:
 		"speed": 2.25,
 		"range": 1.55,
 		"energy": 30.0,
+		"attack_speed": 0.58,
+		"accuracy": 48.0,
+		"stability": 12.0,
+		"weight": 24.0,
 	}
 	for slot in SLOTS:
 		var part := get_option(slot, int(build.get(slot, 0)))
@@ -170,9 +248,78 @@ static func build_stats(build: Dictionary) -> Dictionary:
 	stats.speed *= float(synergy.speed_mult)
 	stats.range *= float(synergy.range_mult)
 	stats.energy *= float(synergy.energy_mult)
-	stats.speed = clampf(stats.speed, 3.2, 8.5)
+	stats.attack_speed *= float(synergy.speed_mult)
+	stats.stability *= float(synergy.armor_mult)
+	stats.speed -= maxf(0.0, float(stats.weight) - 115.0) * 0.006
+	stats.attack_speed -= maxf(0.0, float(stats.weight) - 105.0) * 0.0015
+	stats.speed = clampf(stats.speed, 2.4, 8.5)
+	stats.attack_speed = clampf(stats.attack_speed, 0.55, 2.25)
 	stats.range = clampf(stats.range, 2.0, 8.0)
+	stats.accuracy = clampf(stats.accuracy, 50.0, 98.0)
+	stats.stability = clampf(stats.stability, 15.0, 90.0)
+	stats.weight = clampf(stats.weight, 55.0, 230.0)
 	return stats
+
+static func normalized_stats(build: Dictionary) -> Dictionary:
+	var stats := build_stats(build)
+	var normalized := {}
+	for key in STAT_KEYS:
+		var limits: Vector2 = STAT_RANGES[key]
+		normalized[key] = clampf(inverse_lerp(limits.x, limits.y, float(stats[key])) * 100.0, 0.0, 100.0)
+	return normalized
+
+static func dominant_affinity(build: Dictionary) -> String:
+	var counts := {}
+	for affinity in AFFINITIES:
+		counts[affinity] = 0
+	for slot in SLOTS:
+		var part := get_option(slot, int(build.get(slot, 0)))
+		counts[part.affinity] = int(counts[part.affinity]) + 1
+	var winner: String = AFFINITIES[0]
+	for affinity in AFFINITIES:
+		if int(counts[affinity]) > int(counts[winner]):
+			winner = affinity
+	return winner
+
+static func weapon_affinity(build: Dictionary, use_left: bool) -> String:
+	var slot := "left_weapon" if use_left else "right_weapon"
+	return str(get_option(slot, int(build.get(slot, 0))).affinity)
+
+static func affinity_multiplier(attacking_affinity: String, defending_affinity: String) -> float:
+	if str(AFFINITY_BEATS.get(attacking_affinity, "")) == defending_affinity:
+		return 1.35
+	if str(AFFINITY_BEATS.get(defending_affinity, "")) == attacking_affinity:
+		return 0.74
+	if attacking_affinity == defending_affinity:
+		return 0.92
+	return 1.0
+
+static func combat_rating(build: Dictionary) -> float:
+	var stats := build_stats(build)
+	var durability: float = float(stats.health) * (1.0 + float(stats.armor) / 115.0)
+	var dps: float = float(stats.power) * float(stats.attack_speed) * float(stats.accuracy) / 100.0
+	var control: float = 0.72 + float(stats.speed) * 0.035 + float(stats.range) * 0.025 + float(stats.stability) * 0.002
+	return sqrt(durability * dps) * control
+
+static func matchup_prediction(build_a: Dictionary, build_b: Dictionary) -> Dictionary:
+	var rating_a := combat_rating(build_a)
+	var rating_b := combat_rating(build_b)
+	var affinity_a := dominant_affinity(build_a)
+	var affinity_b := dominant_affinity(build_b)
+	rating_a *= affinity_multiplier(affinity_a, affinity_b)
+	rating_b *= affinity_multiplier(affinity_b, affinity_a)
+	var total := maxf(0.001, rating_a + rating_b)
+	return {
+		"a": rating_a / total,
+		"b": rating_b / total,
+		"affinity_a": affinity_a,
+		"affinity_b": affinity_b,
+	}
+
+static func part_price(slot: String, index: int) -> int:
+	var tier := floori(float(clampi(index, 0, 19)) / 4.0)
+	var slot_bonus := 55 if slot in ["left_weapon", "right_weapon"] else 0
+	return 90 + tier * 145 + index * 18 + slot_bonus
 
 static func get_synergy(build: Dictionary) -> Dictionary:
 	var result := {
@@ -232,15 +379,18 @@ static func get_synergy(build: Dictionary) -> Dictionary:
 
 static func describe_option(slot: String, index: int) -> String:
 	var part := get_option(slot, index)
-	return "%s · %s\nPOT +%.0f   ARM +%.0f   VEL +%.1f\nVIDA +%.0f   ALC +%.1f   ENE +%.0f" % [
+	return "%s · %s · %s\nDAÑO +%.0f  ARM +%.0f  ATAQ +%.2f  PREC +%.0f\nVIDA +%.0f  ALC +%.1f  ENE +%.0f  PESO +%.0f" % [
 		part.name,
 		part.trait,
+		AFFINITY_NAMES[part.affinity],
 		part.power,
 		part.armor,
-		part.speed,
+		part.attack_speed,
+		part.accuracy,
 		part.health,
 		part.range,
 		part.energy,
+		part.weight,
 	]
 
 static func validate_catalog() -> bool:

@@ -152,6 +152,16 @@ func _process(delta: float) -> void:
 		torso.rotation.y = gait * 0.055 * walk_amount
 	if head:
 		head.rotation.y = -gait * 0.075 * walk_amount + sin(_time * 1.4) * 0.025
+	for side_name in ["left", "right"]:
+		var saw: Node3D = motion_joints.get("%s_weapon_saw" % side_name)
+		if saw:
+			saw.rotation.z += delta * (18.0 if _attack_time > 0.0 else 4.5)
+		var scissor_a: Node3D = motion_joints.get("%s_scissor_a" % side_name)
+		var scissor_b: Node3D = motion_joints.get("%s_scissor_b" % side_name)
+		if scissor_a and scissor_b:
+			var opening: float = 0.18 + absf(sin(_time * (12.0 if _attack_time > 0.0 else 2.4))) * 0.48
+			scissor_a.rotation.z = -opening
+			scissor_b.rotation.z = opening
 	var target_y := _base_y + sin(_time * 2.1) * 0.018
 	if moving:
 		target_y += abs(gait) * 0.10
@@ -415,6 +425,7 @@ func _build_leg(root: Node3D, slot: String, index: int, metal: Color, accent: Co
 
 func _build_weapon(root: Node3D, index: int, metal: Color, accent: Color, side: float) -> void:
 	root.position = Vector3(0.0, -0.22, 0.10)
+	var side_name := "left" if side < 0.0 else "right"
 	match index:
 		0:
 			_add_shape(root, 1, Vector3(0.16, 1.18, 0.16), metal, false, Vector3(0.0, -0.18, 0.0))
@@ -423,16 +434,30 @@ func _build_weapon(root: Node3D, index: int, metal: Color, accent: Color, side: 
 			_add_shape(root, 1, Vector3(0.14, 0.54, 0.14), metal, false, Vector3(0.0, -0.12, 0.0))
 			_add_shape(root, 0, Vector3(0.18, 1.56, 0.12), accent, true, Vector3(0.0, -1.10, 0.0))
 		2:
-			_add_shape(root, 2, Vector3(0.72, 0.66, 0.72), metal, false, Vector3(0.0, -0.38, 0.12))
-			for x in [-0.24, 0.0, 0.24]:
-				_add_cone(root, 0.06, 0.36, accent, Vector3(x, -0.64, 0.22), Vector3(90.0, 0.0, 0.0))
+			for x in [-0.28, 0.28]:
+				_add_shape(root, 1, Vector3(0.30, 0.14, 0.30), metal, false, Vector3(x, -0.20, 0.0), Vector3(90.0, 0.0, 0.0))
+			_add_shape(root, 2, Vector3(0.30, 0.28, 0.30), accent, true, Vector3(0.0, -0.48, 0.0))
+			var blade_a := Node3D.new()
+			var blade_b := Node3D.new()
+			blade_a.position = Vector3(0.0, -0.48, 0.0)
+			blade_b.position = Vector3(0.0, -0.48, 0.0)
+			root.add_child(blade_a)
+			root.add_child(blade_b)
+			_add_shape(blade_a, 0, Vector3(0.14, 1.38, 0.08), accent, true, Vector3(0.0, -0.70, 0.0))
+			_add_shape(blade_b, 0, Vector3(0.14, 1.38, 0.08), accent, true, Vector3(0.0, -0.70, 0.0))
+			motion_joints["%s_scissor_a" % side_name] = blade_a
+			motion_joints["%s_scissor_b" % side_name] = blade_b
 		3:
 			_add_shape(root, 1, Vector3(0.52, 1.10, 0.52), metal, false, Vector3(0.0, -0.36, 0.0))
 			_add_shape(root, 2, Vector3(0.48, 0.48, 0.48), Color("74e8ff"), true, Vector3(0.0, -0.95, 0.0), Vector3.ZERO, true)
 		4:
-			_add_shape(root, 1, Vector3(1.08, 0.18, 1.08), metal, false, Vector3(0.0, -0.72, 0.0), Vector3(90.0, 0.0, 0.0))
+			var saw_root := Node3D.new()
+			saw_root.position = Vector3(0.0, -0.72, 0.0)
+			root.add_child(saw_root)
+			_add_shape(saw_root, 1, Vector3(1.08, 0.18, 1.08), metal, false, Vector3.ZERO, Vector3(90.0, 0.0, 0.0))
 			for angle in range(0, 360, 45):
-				_add_cone(root, 0.06, 0.30, accent, Vector3(cos(deg_to_rad(angle)) * 0.62, -0.72, sin(deg_to_rad(angle)) * 0.62), Vector3(90.0, 0.0, -float(angle)))
+				_add_cone(saw_root, 0.06, 0.30, accent, Vector3(cos(deg_to_rad(angle)) * 0.62, sin(deg_to_rad(angle)) * 0.62, 0.0), Vector3(90.0, 0.0, -float(angle)))
+			motion_joints["%s_weapon_saw" % side_name] = saw_root
 		5:
 			_add_shape(root, 1, Vector3(0.12, 2.18, 0.12), metal, false, Vector3(0.0, -0.92, 0.0))
 			_add_cone(root, 0.16, 0.52, accent, Vector3(0.0, -2.20, 0.0))
@@ -440,8 +465,9 @@ func _build_weapon(root: Node3D, index: int, metal: Color, accent: Color, side: 
 			_add_shape(root, 1, Vector3(0.46, 1.18, 0.46), metal, false, Vector3(0.0, -0.42, 0.0))
 			_add_shape(root, 0, Vector3(0.26, 0.22, 0.92), Color("a8f6ff"), true, Vector3(0.0, -0.92, 0.44))
 		7:
-			_add_shape(root, 1, Vector3(0.07, 1.22, 0.07), metal, false, Vector3(0.0, -0.64, 0.0))
-			_add_shape(root, 1, Vector3(0.72, 0.16, 0.72), accent, true, Vector3(0.0, -1.34, 0.0), Vector3(90.0, 0.0, 0.0))
+			_add_shape(root, 1, Vector3(0.12, 1.62, 0.12), metal, false, Vector3(0.0, -0.68, 0.0))
+			_add_shape(root, 0, Vector3(0.74, 0.58, 0.16), accent, true, Vector3(0.0, -1.62, 0.0), Vector3(18.0, 0.0, 0.0))
+			_add_cone(root, 0.38, 0.48, accent, Vector3(0.0, -1.98, 0.0), Vector3(180.0, 0.0, 0.0))
 		8:
 			_add_shape(root, 1, Vector3(0.42, 0.84, 0.42), metal, false, Vector3(0.0, -0.34, 0.0))
 			_add_cone(root, 0.34, 0.96, accent, Vector3(0.0, -1.22, 0.0))
