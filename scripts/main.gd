@@ -26,6 +26,16 @@ const KIDS_ROBOT_TIPS := [
 	"Usa herramientas con buena energía y alcance.",
 ]
 const KIDS_ROBOT_COLORS := [Color("53d8ff"), Color("ffe36e"), Color("78dca0"), Color("c58cff")]
+const TOUCH_PART_LABELS := {
+	"head": "CABEZA",
+	"torso": "TORSO",
+	"left_arm": "BRAZO I",
+	"right_arm": "BRAZO D",
+	"left_leg": "PIERNA I",
+	"right_leg": "PIERNA D",
+	"left_weapon": "MANO I",
+	"right_weapon": "MANO D",
+}
 const KIDS_PRESETS := [
 	{"head": 0, "torso": 1, "left_arm": 0, "right_arm": 1, "left_leg": 0, "right_leg": 1, "left_weapon": 0, "right_weapon": 3},
 	{"head": 3, "torso": 3, "left_arm": 2, "right_arm": 2, "left_leg": 3, "right_leg": 3, "left_weapon": 3, "right_weapon": 3},
@@ -92,6 +102,8 @@ var heavy_buttons: Array[Button] = []
 var lan_status_label: Label
 var lan_start_button: Button
 var speed_button: Button
+var random_button: Button
+var robot_touch_buttons: Array[Button] = []
 var recently_unlocked_slot := ""
 var recently_unlocked_index := -1
 var story_opponent_build := {}
@@ -100,6 +112,7 @@ var story_opponent_name := ""
 var story_opponent_mode := ""
 var ai_recommended_build := {}
 var kids_preset_index := 0
+var kids_is_custom := false
 
 func _ready() -> void:
 	Engine.time_scale = 1.0
@@ -127,6 +140,8 @@ func _process(delta: float) -> void:
 			preview_robot.rotation.y = lerpf(preview_robot.rotation.y, sin(preview_time * 0.72) * 0.18, minf(1.0, delta * 4.0))
 		else:
 			preview_robot.rotation.y += delta * 0.48
+	if state == GameState.BUILD and is_instance_valid(preview_robot):
+		_update_robot_touch_targets()
 	if state == GameState.BATTLE and fighters.size() >= 2:
 		_update_battle_camera(delta)
 		_update_heavy_buttons()
@@ -296,6 +311,8 @@ func _start_kids_mode() -> void:
 	current_builder = 1
 	player_builds.clear()
 	build_duration = -1.0
+	selected_slot = "head"
+	kids_is_custom = false
 	kids_preset_index = clampi(kids_preset_index, 0, KIDS_PRESETS.size() - 1)
 	var selected_build: Dictionary = KIDS_PRESETS[kids_preset_index]
 	current_build = selected_build.duplicate(true)
@@ -315,7 +332,7 @@ func _show_kids_builder() -> void:
 	camera.fov = 47.0
 	camera.look_at(Vector3(-2.15, 2.65, 0.0), Vector3.UP)
 
-	var banner := _title_label("1 · ELIGE TU ROBOT", 32, GOLD)
+	var banner := _title_label("1 · TOCA UNA PARTE DEL ROBOT", 29, GOLD)
 	banner.anchor_left = 0.015
 	banner.anchor_top = 0.02
 	banner.anchor_right = 0.57
@@ -330,49 +347,93 @@ func _show_kids_builder() -> void:
 	panel.add_theme_stylebox_override("panel", _panel_style(Color("e51c3157"), 26))
 	ui_root.add_child(panel)
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 10)
+	box.add_theme_constant_override("separation", 7)
 	panel.add_child(box)
-	box.add_child(_title_label(str(KIDS_ROBOT_NAMES[kids_preset_index]), 38, tint))
-	var tip := _label(str(KIDS_ROBOT_TIPS[kids_preset_index]), 19, INK)
+	var robot_title: String = "MI ROBOT" if kids_is_custom else str(KIDS_ROBOT_NAMES[kids_preset_index])
+	box.add_child(_title_label(robot_title, 32, tint))
+	var tip_text: String = "Puedes volver a tocar cualquier parte y cambiarla otra vez." if kids_is_custom else str(KIDS_ROBOT_TIPS[kids_preset_index])
+	var tip := _label(tip_text, 15, INK)
 	tip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	tip.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(tip)
 	var stats := Catalog.normalized_stats(current_build)
 	var simple_stats := _label(
-		"❤️  VIDA       %s\n⚡  RAPIDEZ   %s\n💪  FUERZA     %s\n🛡  DEFENSA   %s" % [
+		"VIDA %s   RAPIDEZ %s\nFUERZA %s   DEFENSA %s" % [
 			_kids_meter(float(stats.health)),
 			_kids_meter(float(stats.speed)),
 			_kids_meter(float(stats.power)),
 			_kids_meter(float(stats.armor)),
 		],
-		18,
+		14,
 		Color("f4fbff")
 	)
 	simple_stats.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	simple_stats.add_theme_constant_override("line_spacing", 7)
 	box.add_child(simple_stats)
 	box.add_child(_separator())
+	var part_title := _title_label("CAMBIAR: %s" % str(Catalog.LABELS[selected_slot]), 20, GOLD)
+	box.add_child(part_title)
+	var part_choices := GridContainer.new()
+	part_choices.columns = 2
+	part_choices.add_theme_constant_override("h_separation", 7)
+	part_choices.add_theme_constant_override("v_separation", 7)
+	part_choices.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	box.add_child(part_choices)
+	var part_names: Array = Catalog.names_for(selected_slot)
+	var chosen_index: int = int(current_build.get(selected_slot, 0))
+	for index in range(4):
+		var selected_prefix: String = "✓ " if index == chosen_index else ""
+		var part_button := _make_button(selected_prefix + str(part_names[index]), _select_kids_part.bind(index), GOLD if index == chosen_index else Color("52688f"), Vector2(205, 58))
+		part_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		part_button.add_theme_font_size_override("font_size", 13)
+		part_button.clip_text = true
+		part_choices.add_child(part_button)
+	var base_label := _label("O ELIGE UNA BASE RÁPIDA", 13, Color("ccecff"))
+	base_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(base_label)
 	var choices := GridContainer.new()
 	choices.columns = 2
-	choices.add_theme_constant_override("h_separation", 8)
-	choices.add_theme_constant_override("v_separation", 8)
-	choices.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	choices.add_theme_constant_override("h_separation", 6)
+	choices.add_theme_constant_override("v_separation", 6)
 	box.add_child(choices)
 	for index in range(KIDS_ROBOT_NAMES.size()):
-		var prefix: String = "✓ " if index == kids_preset_index else ""
-		var choice := _make_button(prefix + str(KIDS_ROBOT_NAMES[index]), _select_kids_preset.bind(index), KIDS_ROBOT_COLORS[index], Vector2(210, 68))
+		var prefix: String = "✓ " if not kids_is_custom and index == kids_preset_index else ""
+		var choice := _make_button(prefix + str(KIDS_ROBOT_NAMES[index]), _select_kids_preset.bind(index), KIDS_ROBOT_COLORS[index], Vector2(205, 42))
 		choice.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		choice.add_theme_font_size_override("font_size", 17)
+		choice.add_theme_font_size_override("font_size", 13)
 		choices.add_child(choice)
-	box.add_child(_make_button("▶  2 · ¡LISTO! VER A MI RIVAL", _finish_kids_robot, Color("54c987"), Vector2(0, 68)))
-	box.add_child(_make_button("←  MENÚ", _show_main_menu, Color("60759a"), Vector2(0, 45)))
+	box.add_child(_make_button("▶  2 · ¡LISTO! VER A MI RIVAL", _finish_kids_robot, Color("54c987"), Vector2(0, 60)))
+	box.add_child(_make_button("←  MENÚ", _show_main_menu, Color("60759a"), Vector2(0, 40)))
+	_add_robot_touch_selectors(true)
+	_add_random_button(true)
 
 func _select_kids_preset(index: int) -> void:
 	kids_preset_index = clampi(index, 0, KIDS_PRESETS.size() - 1)
+	kids_is_custom = false
 	var selected_build: Dictionary = KIDS_PRESETS[kids_preset_index]
 	current_build = selected_build.duplicate(true)
 	if audio:
 		audio.play_sfx("join", 0.94 + float(index) * 0.04)
+	_show_kids_builder()
+
+func _select_kids_slot(slot: String) -> void:
+	selected_slot = slot
+	_show_kids_builder()
+
+func _select_kids_part(index: int) -> void:
+	current_build[selected_slot] = clampi(index, 0, 3)
+	kids_is_custom = true
+	if audio:
+		audio.play_sfx("join", 0.96 + float(index) * 0.04)
+	_show_kids_builder()
+
+func _randomize_kids_build() -> void:
+	for slot_value in Catalog.SLOTS:
+		var slot: String = str(slot_value)
+		current_build[slot] = randi_range(0, 3)
+	kids_is_custom = true
+	selected_slot = "head"
+	if audio:
+		audio.play_sfx("unlock", 1.08)
 	_show_kids_builder()
 
 func _kids_meter(value: float) -> String:
@@ -439,7 +500,6 @@ func _build_builder_ui() -> void:
 	timer_label.custom_minimum_size = Vector2(200, 0)
 	timer_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	top_row.add_child(timer_label)
-	top_row.add_child(_make_button("ALEATORIO", _randomize_build, Color("9d88ff"), Vector2(170, 52)))
 	top_row.add_child(_make_button("SALIR", _show_main_menu, Color("60759a"), Vector2(110, 52)))
 
 	var right_panel := PanelContainer.new()
@@ -517,10 +577,64 @@ func _build_builder_ui() -> void:
 	synergy_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	synergy_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	stat_box.add_child(synergy_label)
+	_add_robot_touch_selectors(false)
+	_add_random_button(false)
 
 func _select_slot(slot: String) -> void:
 	selected_slot = slot
 	_refresh_options()
+
+func _add_robot_touch_selectors(kids_mode: bool) -> void:
+	robot_touch_buttons.clear()
+	for slot_value in Catalog.SLOTS:
+		var slot: String = str(slot_value)
+		var action: Callable = _select_kids_slot.bind(slot) if kids_mode else _select_slot.bind(slot)
+		var color: Color = Color("54c987") if kids_mode else Color("4f8edb")
+		var button := _make_button(str(TOUCH_PART_LABELS[slot]), action, color, Vector2(88, 34))
+		button.size = Vector2(88, 34)
+		button.add_theme_font_size_override("font_size", 11)
+		button.set_meta("robot_slot", slot)
+		button.set_meta("kids_touch", kids_mode)
+		ui_root.add_child(button)
+		robot_touch_buttons.append(button)
+	_update_robot_touch_targets()
+
+func _add_random_button(kids_mode: bool) -> void:
+	var text: String = "🎲  SORPRESA ALEATORIA" if kids_mode else "🎲  ROBOT ALEATORIO"
+	var action: Callable = _randomize_kids_build if kids_mode else _randomize_build
+	random_button = _make_button(text, action, Color("b06cff"), Vector2(250, 52))
+	random_button.size = Vector2(250, 52)
+	random_button.add_theme_font_size_override("font_size", 18)
+	ui_root.add_child(random_button)
+	_update_robot_touch_targets()
+
+func _update_robot_touch_targets() -> void:
+	if not is_instance_valid(preview_robot) or not is_instance_valid(camera):
+		return
+	var viewport_size: Vector2 = ui_root.size
+	if viewport_size.x < 10.0 or viewport_size.y < 10.0:
+		viewport_size = get_viewport().get_visible_rect().size
+	for button in robot_touch_buttons:
+		if not is_instance_valid(button):
+			continue
+		var slot: String = str(button.get_meta("robot_slot", "torso"))
+		var screen_position: Vector2 = camera.unproject_position(preview_robot.get_part_world_position(slot))
+		var side_offset: Vector2 = Vector2.ZERO
+		if slot.begins_with("left"):
+			side_offset.x = -20.0
+		elif slot.begins_with("right"):
+			side_offset.x = 20.0
+		var desired: Vector2 = screen_position - button.size * 0.5 + side_offset
+		desired.x = clampf(desired.x, 8.0, viewport_size.x * 0.575 - button.size.x)
+		desired.y = clampf(desired.y, 108.0, viewport_size.y - button.size.y - 12.0)
+		button.position = desired
+		button.modulate = Color("fff173") if slot == selected_slot else Color.WHITE
+	if is_instance_valid(random_button):
+		var head_screen: Vector2 = camera.unproject_position(preview_robot.get_part_world_position("head"))
+		var random_position: Vector2 = head_screen - Vector2(random_button.size.x * 0.5, random_button.size.y + 78.0)
+		random_position.x = clampf(random_position.x, 12.0, viewport_size.x * 0.575 - random_button.size.x)
+		random_position.y = clampf(random_position.y, 96.0, viewport_size.y * 0.28)
+		random_button.position = random_position
 
 func _select_option(index: int) -> void:
 	if game_mode == "story" and not _is_part_unlocked(selected_slot, index):
@@ -1008,6 +1122,10 @@ func _start_battle() -> void:
 		fighter.sfx_requested.connect(_on_fighter_sfx)
 		fighter.impact.connect(_on_fighter_impact)
 		fighters.append(fighter)
+	for player_index in _controlled_fighter_indexes():
+		if player_index >= 0 and player_index < fighters.size():
+			var aura_color: Color = KIDS_ROBOT_COLORS[kids_preset_index] if game_mode == "kids" and player_index == 0 else TEAM_COLORS[player_index]
+			_add_player_aura(fighters[player_index], aura_color)
 	for fighter in fighters:
 		var possible_targets: Array[ArenaFighter] = []
 		for candidate in fighters:
@@ -1037,6 +1155,57 @@ func _start_battle() -> void:
 	for fighter in fighters:
 		fighter.begin_fight()
 	_show_battle_message("¡A JUGAR!" if game_mode == "kids" else "¡COMBATE!", GOLD)
+
+func _controlled_fighter_indexes() -> Array[int]:
+	var result: Array[int] = []
+	if game_mode == "lan":
+		result.append(local_lan_index)
+	elif game_mode == "local":
+		for index in range(fighters.size()):
+			result.append(index)
+	else:
+		result.append(0)
+	return result
+
+func _add_player_aura(fighter: ArenaFighter, color: Color) -> void:
+	if not is_instance_valid(fighter):
+		return
+	var aura: Node3D = Node3D.new()
+	aura.name = "PlayerAura"
+	aura.position = Vector3(0.0, -0.05, 0.0)
+	fighter.add_child(aura)
+	for layer in range(2):
+		var glow_disc: MeshInstance3D = MeshInstance3D.new()
+		var disc_mesh: CylinderMesh = CylinderMesh.new()
+		disc_mesh.top_radius = 1.20 - float(layer) * 0.25
+		disc_mesh.bottom_radius = disc_mesh.top_radius
+		disc_mesh.height = 0.035 + float(layer) * 0.012
+		disc_mesh.radial_segments = 40
+		var material: StandardMaterial3D = StandardMaterial3D.new()
+		var aura_tint: Color = color
+		aura_tint.a = 0.18 if layer == 0 else 0.34
+		material.albedo_color = aura_tint
+		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		material.emission_enabled = true
+		material.emission = color * (1.7 if layer == 0 else 2.4)
+		material.emission_energy_multiplier = 1.8
+		disc_mesh.material = material
+		glow_disc.mesh = disc_mesh
+		glow_disc.position.y = float(layer) * 0.025
+		aura.add_child(glow_disc)
+	var glow_light: OmniLight3D = OmniLight3D.new()
+	glow_light.position.y = 0.45
+	glow_light.light_color = color
+	glow_light.light_energy = 1.1
+	glow_light.omni_range = 3.2
+	glow_light.shadow_enabled = false
+	aura.add_child(glow_light)
+	var aura_tween: Tween = aura.create_tween()
+	aura_tween.set_loops()
+	aura_tween.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	aura_tween.tween_property(aura, "scale", Vector3(1.10, 1.0, 1.10), 0.72)
+	aura_tween.tween_property(aura, "scale", Vector3.ONE, 0.72)
 
 func _build_battle_ui(names: Array[String]) -> void:
 	var top := PanelContainer.new()
@@ -1105,14 +1274,7 @@ func _build_battle_ui(names: Array[String]) -> void:
 	heavy_row.add_theme_constant_override("separation", 8)
 	ui_root.add_child(heavy_row)
 	heavy_buttons.clear()
-	var controllable: Array[int] = []
-	if game_mode == "lan":
-		controllable.append(local_lan_index)
-	elif game_mode == "local":
-		for index in range(fighters.size()):
-			controllable.append(index)
-	else:
-		controllable.append(0)
+	var controllable: Array[int] = _controlled_fighter_indexes()
 	for index in controllable:
 		var button_text: String = "✨  SUPERPODER" if game_mode == "kids" else "USAR ARMA J%d" % (index + 1)
 		var button_size := Vector2(330, 76) if game_mode == "kids" else Vector2(218, 60)
@@ -1454,9 +1616,9 @@ func _show_help() -> void:
 	box.add_child(_title_label("CÓMO SE JUEGA", 40, GOLD))
 	var help := _label(
 		"MODO FÁCIL · SOLO 3 PASOS\n\n" +
-		"1  ELIGE UN ROBOT\nEstrella es equilibrado, Rayito es rápido, Fortachón tiene mucha vida e Inventor usa buenos poderes.\n\n" +
+		"1  ELIGE Y CAMBIA PARTES\nToca cabeza, torso, brazos, piernas o manos directamente sobre el robot. Puedes volver a cambiarlas antes de jugar. En modo fácil hay cuatro opciones por zona.\n\n" +
 		"2  CONOCE A TU RIVAL\nLos puntos muestran quién tiene más vida, fuerza y rapidez.\n\n" +
-		"3  ¡JUEGA!\nLos robots se mueven solos. Toca el botón verde SUPERPODER cuando diga LISTO.\n\n" +
+		"3  ¡JUEGA!\nLos robots se mueven solos. Toca el botón verde SUPERPODER cuando diga LISTO. El aro luminoso muestra cuál es tu robot.\n\n" +
 		"SI NO GANAS\nNo pasa nada. Toca AYÚDAME A ELEGIR y el juego recomendará el robot más conveniente.\n\n" +
 		"MÁS OPCIONES\nTaller avanzado permite construir pieza por pieza. También hay dos jugadores y modo Wi-Fi. Todos los modos de esta edición usan destellos de colores y conservan sus piezas.",
 		18,
@@ -1525,9 +1687,11 @@ func _clear_ui() -> void:
 	fighter_hp_bars.clear()
 	fighter_hp_texts.clear()
 	heavy_buttons.clear()
+	robot_touch_buttons.clear()
 	lan_status_label = null
 	lan_start_button = null
 	speed_button = null
+	random_button = null
 
 func _build_workshop() -> void:
 	_mesh_box(workshop_root, Vector3(22.0, 0.45, 16.0), Color("101a35"), Vector3(0.0, -0.32, 0.0), 0.45)
@@ -1785,6 +1949,8 @@ func _run_smoke_test() -> void:
 	fighter_test_a.setup_robot(maximum_build, BLUE, 1.0, 0, "PRUEBA A")
 	fighter_test_b.setup_robot(Catalog.empty_build(), RED, 0.75, 1, "PRUEBA B")
 	passed = passed and fighter_test_a.personality_id in range(4)
+	_add_player_aura(fighter_test_a, BLUE)
+	passed = passed and fighter_test_a.has_node("PlayerAura") and TOUCH_PART_LABELS.size() == 8
 	fighter_test_a.set_opponent(fighter_test_b)
 	fighter_test_b.set_opponent(fighter_test_a)
 	fighter_test_a.begin_fight()
@@ -1799,5 +1965,5 @@ func _run_smoke_test() -> void:
 	passed = passed and KIDS_PRESETS.size() == 4 and KIDS_ROBOT_NAMES.size() == 4
 	var preview_prediction := _kids_prediction_for(maximum_build, Catalog.empty_build())
 	passed = passed and float(preview_prediction.player) > 0.0 and float(preview_prediction.cpu) > 0.0
-	print("FORJA_KIDS_SMOKE_TEST:", "PASS" if passed else "FAIL", " presets=4 pieces_safe=OK simple_ui=OK superpower=OK LAN=4")
+	print("FORJA_KIDS_SMOKE_TEST:", "PASS" if passed else "FAIL", " presets=4 touch_parts=8 aura=OK random=OK pieces_safe=OK LAN=4")
 	get_tree().quit(0 if passed else 1)

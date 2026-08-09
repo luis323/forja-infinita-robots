@@ -1,4 +1,4 @@
-# Forja Infinita: Robots Kids v1.5.0
+# Forja Infinita: Robots Kids v1.6.0
 
 Edición infantil independiente para Godot 4.4.1, Android ARM64 y PC. Usa un identificador Android diferente, por lo que puede instalarse junto a la edición normal.
 
@@ -20,12 +20,17 @@ El modo principal está diseñado en tres pasos grandes y claros:
 ## Diseño infantil
 
 - Robot grande durante la elección, sin menús encima del modelo.
+- Selección directa: toca cabeza, torso, brazos, piernas o manos sobre el propio robot para abrir esa categoría.
+- Puedes volver a tocar cualquier zona y cambiarla todas las veces que quieras antes de comenzar.
+- El modo Kids ofrece solo cuatro piezas claras por zona; el Taller avanzado conserva las veinte.
+- Botón aleatorio grande y visible flotando justo encima del robot.
 - Botones táctiles grandes, textos cortos y colores diferentes para cada robot.
 - Rival presentado antes de cada partida con solo tres comparaciones importantes.
 - CPU inicial más fácil y dificultad progresiva.
 - Un solo control durante el juego: **Superpoder**.
 - Destellos de cinco colores en los impactos.
 - Las piezas nunca se desprenden y los robots no muestran deterioro visual.
+- Un aro de luz suave sigue al robot de cada jugador dentro del ring; los rivales controlados por la CPU no lo tienen.
 - Al terminar, el robot que pierde simplemente se toma un descanso.
 - Victoria entrega tres estrellas y cada intento entrega una estrella.
 - Si el jugador no gana, **Ayúdame a elegir** recomienda automáticamente el robot preparado con mayor posibilidad contra ese rival.
