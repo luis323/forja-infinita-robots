@@ -16,6 +16,7 @@ const TORSO_DEPTH := [0.94, 1.02, 1.18, 0.72, 1.10, 0.96, 1.24, 0.68, 1.08, 1.14
 var part_roots := {}
 var motion_joints := {}
 var weapon_mounts := {}
+var detached_slots := {}
 var team_tint := Color("48d8ff")
 var moving := false
 var defeated := false
@@ -37,6 +38,7 @@ func build_robot(build: Dictionary, tint: Color, animate_slot: String = "") -> v
 	part_roots.clear()
 	motion_joints.clear()
 	weapon_mounts.clear()
+	detached_slots.clear()
 	for slot in Catalog.SLOTS:
 		var index := int(build.get(slot, 0))
 		var root := _build_part(slot, index)
@@ -55,12 +57,83 @@ func build_robot(build: Dictionary, tint: Color, animate_slot: String = "") -> v
 func set_moving(value: bool) -> void:
 	moving = value
 
+func has_part(slot: String) -> bool:
+	return part_roots.has(slot) and is_instance_valid(part_roots[slot]) and not bool(detached_slots.get(slot, false))
+
+func get_part_world_position(slot: String) -> Vector3:
+	var root: Node3D = part_roots.get(slot)
+	if is_instance_valid(root):
+		return root.global_position
+	return global_position + Vector3(0.0, 2.5, 0.0)
+
+func detach_part(slot: String, impulse_direction: Vector3) -> bool:
+	if slot not in ["head", "left_arm", "right_arm", "left_weapon", "right_weapon"] or not has_part(slot):
+		return false
+	var root: Node3D = part_roots.get(slot)
+	var side_name := "left" if slot.begins_with("left") else "right"
+	if slot.ends_with("_arm"):
+		var weapon_slot := side_name + "_weapon"
+		if has_part(weapon_slot):
+			detached_slots[weapon_slot] = true
+			part_roots.erase(weapon_slot)
+		weapon_mounts.erase(side_name)
+		motion_joints.erase(slot + "_upper")
+		motion_joints.erase(slot + "_elbow")
+		motion_joints.erase("%s_weapon_saw" % side_name)
+		motion_joints.erase("%s_scissor_a" % side_name)
+		motion_joints.erase("%s_scissor_b" % side_name)
+	elif slot.ends_with("_weapon"):
+		motion_joints.erase("%s_weapon_saw" % side_name)
+		motion_joints.erase("%s_scissor_a" % side_name)
+		motion_joints.erase("%s_scissor_b" % side_name)
+	detached_slots[slot] = true
+	part_roots.erase(slot)
+	_add_exposed_joint(slot)
+	var arena_root := get_parent().get_parent()
+	if not is_instance_valid(arena_root):
+		root.queue_free()
+		return true
+	root.reparent(arena_root, true)
+	var direction := impulse_direction.normalized()
+	if direction.length() < 0.05:
+		direction = Vector3(1.0, 0.0, 0.0)
+	var destination := root.global_position + direction * 2.2 + Vector3(0.0, 1.45, 0.0)
+	var ground_position := destination
+	ground_position.y = 0.34
+	var spin := root.rotation + Vector3(2.8, 3.9, -2.4) * (1.0 if side_name == "right" else -1.0)
+	var tween := root.create_tween()
+	tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.tween_property(root, "global_position", destination, 0.55)
+	tween.parallel().tween_property(root, "rotation", spin, 0.55)
+	tween.set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
+	tween.tween_property(root, "global_position", ground_position, 0.62)
+	tween.tween_interval(2.2)
+	tween.tween_property(root, "scale", Vector3.ZERO, 0.42)
+	tween.tween_callback(root.queue_free)
+	return true
+
+func _add_exposed_joint(slot: String) -> void:
+	var local_position := Vector3(0.0, 4.12, 0.0)
+	match slot:
+		"left_arm":
+			local_position = Vector3(-1.20, 3.38, 0.0)
+		"right_arm":
+			local_position = Vector3(1.20, 3.38, 0.0)
+		"left_weapon":
+			local_position = Vector3(-1.78, 1.62, 0.0)
+		"right_weapon":
+			local_position = Vector3(1.78, 1.62, 0.0)
+	_add_shape(self, 2, Vector3(0.28, 0.28, 0.28), Color("ff9d45"), true, local_position)
+	for index in range(3):
+		var cable_offset := Vector3((float(index) - 1.0) * 0.10, -0.15, 0.03)
+		_add_shape(self, 1, Vector3(0.045, 0.34 + float(index) * 0.05, 0.045), Color("64d9ff") if index % 2 == 0 else Color("fff173"), true, local_position + cable_offset)
+
 func play_attack(use_left: bool, heavy: bool = false) -> void:
 	if defeated:
 		return
 	_attack_left = use_left
 	_attack_heavy = heavy
-	_attack_duration = 0.54 if heavy else 0.38
+	_attack_duration = 0.78 if heavy else 0.50
 	_attack_time = _attack_duration
 
 func play_hit() -> void:
@@ -103,7 +176,7 @@ func _process(delta: float) -> void:
 	if defeated or celebrating:
 		return
 	_attack_time = maxf(0.0, _attack_time - delta)
-	var gait := sin(_time * 8.5)
+	var gait := sin(_time * 6.8)
 	var walk_amount := 1.0 if moving else 0.0
 	var left_arm_upper: Node3D = motion_joints.get("left_arm_upper")
 	var right_arm_upper: Node3D = motion_joints.get("right_arm_upper")

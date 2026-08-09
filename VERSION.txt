@@ -1,2 +1,2 @@
-Forja Infinita: Robots v1.2.0
+Forja Infinita: Robots v1.3.0
 Base tecnica reconstruida desde Sendas del Alba v0.28.1.

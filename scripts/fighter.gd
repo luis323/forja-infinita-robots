@@ -9,6 +9,15 @@ signal impact(strength: float, impact_position: Vector3)
 
 const Catalog = preload("res://scripts/robot_catalog.gd")
 const RobotModelScript = preload("res://scripts/robot_model.gd")
+const CUTTING_WEAPONS := [1, 2, 4, 5, 8, 13, 16]
+const FORCE_WEAPONS := [0, 7, 9, 10, 14, 19]
+const PART_LABELS := {
+	"head": "CABEZA",
+	"left_arm": "BRAZO IZQUIERDO",
+	"right_arm": "BRAZO DERECHO",
+	"left_weapon": "ARMA IZQUIERDA",
+	"right_weapon": "ARMA DERECHA",
+}
 
 var fighter_id := 0
 var build := {}
@@ -34,6 +43,11 @@ var _motion_time := 0.0
 var _target_timer := 0.0
 var heavy_cooldown := 0.0
 var _manual_heavy_requested := false
+var _manual_use_left := true
+var _next_manual_left := true
+var detached_parts := {}
+var joint_integrity := {}
+var joint_maximum := {}
 
 func setup_robot(new_build: Dictionary, tint: Color, stat_multiplier: float, new_id: int, robot_name: String) -> void:
 	fighter_id = new_id
@@ -47,6 +61,16 @@ func setup_robot(new_build: Dictionary, tint: Color, stat_multiplier: float, new
 	stats.energy *= stat_multiplier
 	max_hp = float(stats.health)
 	hp = max_hp
+	detached_parts.clear()
+	var joint_strength := 68.0 + float(stats.armor) * 1.15 + float(stats.stability) * 0.42
+	joint_maximum = {
+		"left_weapon": joint_strength * 0.62,
+		"right_weapon": joint_strength * 0.62,
+		"left_arm": joint_strength,
+		"right_arm": joint_strength,
+		"head": joint_strength * 1.18,
+	}
+	joint_integrity = joint_maximum.duplicate(true)
 	var deterministic_seed := 1171 + new_id * 7919
 	for slot in Catalog.SLOTS:
 		deterministic_seed = deterministic_seed * 31 + int(build.get(slot, 0)) * 97
@@ -77,12 +101,55 @@ func set_opponents(values: Array[ArenaFighter]) -> void:
 	_choose_target()
 
 func request_heavy_attack() -> bool:
-	if not active or hp <= 0.0 or heavy_cooldown > 0.0:
+	if not active or hp <= 0.0 or heavy_cooldown > 0.0 or not has_manual_weapon():
 		return false
+	_manual_use_left = _choose_attack_side(_next_manual_left)
+	_next_manual_left = not _manual_use_left
 	_manual_heavy_requested = true
 	heavy_cooldown = clampf(6.8 - float(stats.energy) * 0.012, 4.6, 6.0)
-	combat_event.emit("%s PREPARA GOLPE FUERTE" % display_name, team_color)
+	combat_event.emit("%s PREPARA %s" % [display_name, _action_label_for_side(_manual_use_left)], team_color)
 	return true
+
+func has_manual_weapon() -> bool:
+	if not is_instance_valid(model):
+		return false
+	return _side_available(true) or _side_available(false)
+
+func manual_action_label() -> String:
+	if not has_manual_weapon():
+		return "SIN ARMA"
+	var use_left := _choose_attack_side(_next_manual_left)
+	return _action_label_for_side(use_left)
+
+func _action_label_for_side(use_left: bool) -> String:
+	var slot := "left_weapon" if use_left else "right_weapon"
+	var names := Catalog.names_for(slot)
+	var weapon_name := str(names[int(build.get(slot, 0))]).to_upper()
+	if weapon_name.length() > 15:
+		weapon_name = weapon_name.substr(0, 15)
+	return "USAR " + weapon_name
+
+func _side_available(use_left: bool) -> bool:
+	var side := "left" if use_left else "right"
+	return model.has_part(side + "_arm") and model.has_part(side + "_weapon")
+
+func _arm_available(use_left: bool) -> bool:
+	var side := "left" if use_left else "right"
+	return model.has_part(side + "_arm")
+
+func _choose_attack_side(prefer_left: bool) -> bool:
+	if _side_available(prefer_left):
+		return prefer_left
+	if _side_available(not prefer_left):
+		return not prefer_left
+	return prefer_left
+
+func _choose_arm_side(prefer_left: bool) -> bool:
+	if _arm_available(prefer_left):
+		return prefer_left
+	if _arm_available(not prefer_left):
+		return not prefer_left
+	return prefer_left
 
 func begin_fight() -> void:
 	active = true
@@ -138,7 +205,7 @@ func _physics_process(delta: float) -> void:
 		_impulse_velocity += dodge_direction * _rng.randf_range(2.4, 4.0)
 		_strafe_direction *= -1.0
 		_maneuver_timer = _rng.randf_range(1.25, 2.35)
-	var movement_speed := float(stats.speed) * (0.72 if distance < preferred_range else 1.0)
+	var movement_speed := float(stats.speed) * 0.82 * (0.72 if distance < preferred_range else 1.0)
 	velocity = move_direction * movement_speed + _impulse_velocity
 	move_and_slide()
 	_keep_inside_ring()
@@ -168,11 +235,15 @@ func _perform_attack(distance: float) -> void:
 	if not is_instance_valid(opponent) or opponent.hp <= 0.0:
 		return
 	attack_count += 1
-	var use_left := attack_count % 2 == 0
+	var use_left := _choose_arm_side(attack_count % 2 == 0)
+	var has_arm := _arm_available(use_left)
+	var has_weapon := _side_available(use_left)
 	var special_every := maxi(3, 7 - int(float(stats.energy) / 55.0))
 	var special := attack_count % special_every == 0
 	var damage_variation := 0.96 + float((attack_count * 13 + fighter_id * 5) % 9) * 0.01
 	var damage := float(stats.power) * damage_variation
+	if not has_weapon:
+		damage *= 0.72 if has_arm else 0.42
 	if special:
 		damage *= 1.58
 		combat_event.emit("¡%s activa SOBRECARGA!" % display_name, team_color)
@@ -183,9 +254,9 @@ func _perform_attack(distance: float) -> void:
 	if not special and accuracy_roll > float(stats.accuracy):
 		combat_event.emit("%s FALLA EL ATAQUE" % display_name, Color("d7e1ef"))
 		model.play_attack(use_left, false)
-		attack_cooldown = maxf(0.28, 1.12 / float(stats.attack_speed))
+		attack_cooldown = maxf(0.42, 1.46 / float(stats.attack_speed))
 		return
-	var attack_affinity := Catalog.weapon_affinity(build, use_left)
+	var attack_affinity := Catalog.weapon_affinity(build, use_left) if has_weapon else Catalog.dominant_affinity(build)
 	var defend_affinity := Catalog.dominant_affinity(opponent.build)
 	var affinity_bonus := Catalog.affinity_multiplier(attack_affinity, defend_affinity)
 	damage *= affinity_bonus
@@ -193,8 +264,11 @@ func _perform_attack(distance: float) -> void:
 		combat_event.emit("¡VENTAJA %s!" % Catalog.AFFINITY_NAMES[attack_affinity], Catalog.AFFINITY_COLORS[attack_affinity])
 	elif affinity_bonus < 0.8:
 		combat_event.emit("ATAQUE POCO EFECTIVO", Color("b9c5d7"))
-	model.play_attack(use_left, special)
-	var is_ranged := float(stats.range) >= 4.35 and distance > 2.3
+	if has_arm:
+		model.play_attack(use_left, special)
+	else:
+		model.play_hit()
+	var is_ranged := has_weapon and float(stats.range) >= 4.35 and distance > 2.3
 	if is_ranged:
 		sfx_requested.emit("shot", 0.90 + _rng.randf_range(-0.06, 0.10))
 		_launch_energy_orb(opponent, damage, special)
@@ -205,9 +279,9 @@ func _perform_attack(distance: float) -> void:
 		if rush.length() > 0.05:
 			_impulse_velocity += rush.normalized() * (5.8 if special else 3.4)
 		opponent.take_damage(damage, global_position, special)
-		if attack_count % 4 == 0 and not special:
-			get_tree().create_timer(0.14).timeout.connect(_combo_strike.bind(opponent, damage * 0.34, global_position))
-	attack_cooldown = maxf(0.28, 1.12 / float(stats.attack_speed))
+		if attack_count % 5 == 0 and not special and has_arm:
+			get_tree().create_timer(0.22).timeout.connect(_combo_strike.bind(opponent, damage * 0.28, global_position))
+	attack_cooldown = maxf(0.42, 1.46 / float(stats.attack_speed))
 	if special:
 		attack_cooldown += 0.28
 
@@ -217,19 +291,24 @@ func _perform_manual_heavy() -> void:
 		return
 	_manual_heavy_requested = false
 	attack_count += 1
-	var use_left := attack_count % 2 == 0
+	var use_left := _manual_use_left
+	if not _side_available(use_left):
+		combat_event.emit("EL ARMA DE %s YA NO ESTÁ DISPONIBLE" % display_name, Color("c4cfdd"))
+		return
 	var attack_affinity := Catalog.weapon_affinity(build, use_left)
 	var defend_affinity := Catalog.dominant_affinity(opponent.build)
-	var damage := float(stats.power) * 2.05 * Catalog.affinity_multiplier(attack_affinity, defend_affinity)
+	var damage := float(stats.power) * 1.82 * Catalog.affinity_multiplier(attack_affinity, defend_affinity)
+	var weapon_slot := "left_weapon" if use_left else "right_weapon"
+	var weapon_index := int(build.get(weapon_slot, 0))
 	model.play_attack(use_left, true)
 	sfx_requested.emit("heavy", 0.82)
 	var rush := opponent.global_position - global_position
 	rush.y = 0.0
 	if rush.length() > 0.05:
 		_impulse_velocity += rush.normalized() * 8.5
-	opponent.take_damage(damage, global_position, true)
-	combat_event.emit("¡GOLPE FUERTE DE %s!" % display_name, team_color)
-	attack_cooldown = 0.82
+	combat_event.emit("¡%s USA SU HERRAMIENTA!" % display_name, team_color)
+	opponent.take_tool_hit(damage, global_position, weapon_index, use_left)
+	attack_cooldown = 1.05
 
 func _combo_strike(victim: ArenaFighter, damage: float, source_position: Vector3) -> void:
 	if not active or not is_instance_valid(victim) or victim.hp <= 0.0:
@@ -237,6 +316,77 @@ func _combo_strike(victim: ArenaFighter, damage: float, source_position: Vector3
 	sfx_requested.emit("swing", 1.18)
 	model.play_attack(attack_count % 2 != 0, false)
 	victim.take_damage(damage, source_position, false)
+
+func take_tool_hit(raw_damage: float, source_position: Vector3, weapon_index: int, attacker_used_left: bool) -> void:
+	if not active or hp <= 0.0:
+		return
+	take_damage(raw_damage, source_position, true)
+	if hp <= 0.0:
+		return
+	var target_slot := _choose_joint_target(weapon_index, attacker_used_left)
+	if target_slot.is_empty():
+		return
+	var tool_factor := 1.42 if weapon_index in CUTTING_WEAPONS else (1.16 if weapon_index in FORCE_WEAPONS else 1.04)
+	var armor_factor := 100.0 / (100.0 + float(stats.armor) * 0.62 + float(stats.stability) * 0.22)
+	var joint_damage := maxf(22.0, raw_damage * tool_factor * armor_factor)
+	joint_integrity[target_slot] = float(joint_integrity.get(target_slot, 1.0)) - joint_damage
+	var impact_position := model.get_part_world_position(target_slot)
+	_spawn_joint_burst(impact_position, joint_damage >= float(joint_maximum.get(target_slot, 1.0)) * 0.70)
+	if float(joint_integrity[target_slot]) <= 0.0:
+		_detach_combat_part(target_slot, source_position, impact_position)
+	else:
+		var damage_ratio := 1.0 - float(joint_integrity[target_slot]) / float(joint_maximum.get(target_slot, 1.0))
+		combat_event.emit("UNIÓN %s DAÑADA · %.0f%%" % [PART_LABELS[target_slot], damage_ratio * 100.0], Color("ffb45f"))
+		sfx_requested.emit("joint", 1.04)
+
+func _choose_joint_target(weapon_index: int, attacker_used_left: bool) -> String:
+	var first_side := "right" if attacker_used_left else "left"
+	var second_side := "left" if first_side == "right" else "right"
+	var candidates: Array[String] = []
+	if weapon_index in CUTTING_WEAPONS:
+		candidates = [first_side + "_arm", second_side + "_arm", first_side + "_weapon", second_side + "_weapon", "head"]
+	elif weapon_index in FORCE_WEAPONS:
+		candidates = [first_side + "_weapon", second_side + "_weapon", first_side + "_arm", second_side + "_arm", "head"]
+	else:
+		candidates = [first_side + "_weapon", "head", second_side + "_weapon", first_side + "_arm", second_side + "_arm"]
+	for candidate in candidates:
+		if not bool(detached_parts.get(candidate, false)) and model.has_part(candidate):
+			return candidate
+	return ""
+
+func _detach_combat_part(slot: String, source_position: Vector3, impact_position: Vector3) -> void:
+	var away := global_position - source_position
+	away.y = 0.35
+	if away.length() < 0.05:
+		away = Vector3(1.0, 0.35, 0.0)
+	if not model.detach_part(slot, away):
+		return
+	detached_parts[slot] = true
+	if slot.ends_with("_arm"):
+		var side := "left" if slot.begins_with("left") else "right"
+		detached_parts[side + "_weapon"] = true
+	_apply_detach_penalty(slot)
+	_spawn_joint_burst(impact_position, true)
+	_spawn_joint_burst(impact_position + Vector3(0.0, 0.18, 0.0), true)
+	sfx_requested.emit("detach", 0.88)
+	impact.emit(0.46, impact_position)
+	combat_event.emit("¡DESARME! %s PIERDE %s" % [display_name, PART_LABELS[slot]], Color("fff173"))
+
+func _apply_detach_penalty(slot: String) -> void:
+	match slot:
+		"left_weapon", "right_weapon":
+			stats.power = float(stats.power) * 0.86
+			stats.range = maxf(1.55, float(stats.range) - 0.55)
+		"left_arm", "right_arm":
+			stats.power = float(stats.power) * 0.72
+			stats.attack_speed = maxf(0.45, float(stats.attack_speed) * 0.84)
+			stats.accuracy = maxf(20.0, float(stats.accuracy) * 0.90)
+			stats.stability = maxf(10.0, float(stats.stability) * 0.92)
+		"head":
+			stats.accuracy = maxf(18.0, float(stats.accuracy) * 0.48)
+			stats.attack_speed = maxf(0.42, float(stats.attack_speed) * 0.78)
+			stats.speed = maxf(1.4, float(stats.speed) * 0.88)
+			stats.energy = float(stats.energy) * 0.75
 
 func take_damage(raw_damage: float, source_position: Vector3, heavy: bool) -> void:
 	if not active or hp <= 0.0:
@@ -300,7 +450,7 @@ func _launch_energy_orb(victim: ArenaFighter, damage: float, heavy: bool) -> voi
 	)
 
 func _spawn_impact_sparks(heavy: bool) -> void:
-	var spark_count := 9 if heavy else 5
+	var spark_count := 18 if heavy else 8
 	for index in range(spark_count):
 		var spark := MeshInstance3D.new()
 		var sphere := SphereMesh.new()
@@ -317,12 +467,39 @@ func _spawn_impact_sparks(heavy: bool) -> void:
 		get_parent().add_child(spark)
 		spark.global_position = global_position + Vector3(0.0, 2.2, 0.0)
 		var angle := TAU * float(index) / float(spark_count) + _rng.randf_range(-0.28, 0.28)
-		var destination := spark.global_position + Vector3(cos(angle), _rng.randf_range(-0.15, 0.85), sin(angle)) * (1.2 if heavy else 0.72)
+		var destination := spark.global_position + Vector3(cos(angle), _rng.randf_range(-0.15, 0.85), sin(angle)) * (1.55 if heavy else 0.86)
 		var spark_tween := spark.create_tween()
 		spark_tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 		spark_tween.tween_property(spark, "global_position", destination, 0.25)
 		spark_tween.parallel().tween_property(spark, "scale", Vector3.ZERO, 0.28)
 		spark_tween.tween_callback(spark.queue_free)
+
+func _spawn_joint_burst(world_position: Vector3, intense: bool) -> void:
+	var spark_count := 28 if intense else 14
+	for index in range(spark_count):
+		var spark := MeshInstance3D.new()
+		var streak := BoxMesh.new()
+		streak.size = Vector3(0.035, 0.035, 0.42 if intense else 0.27)
+		var material := StandardMaterial3D.new()
+		var spark_color := Color("fff173") if index % 3 != 0 else Color("67dfff")
+		material.albedo_color = spark_color
+		material.emission_enabled = true
+		material.emission = spark_color * 2.4
+		material.emission_energy_multiplier = 2.2
+		streak.material = material
+		spark.mesh = streak
+		get_parent().add_child(spark)
+		spark.global_position = world_position
+		var angle := TAU * float(index) / float(spark_count) + _rng.randf_range(-0.20, 0.20)
+		var rise := _rng.randf_range(0.30, 1.45) if intense else _rng.randf_range(0.12, 0.82)
+		var distance := _rng.randf_range(1.25, 2.65) if intense else _rng.randf_range(0.65, 1.35)
+		var destination := world_position + Vector3(cos(angle) * distance, rise, sin(angle) * distance)
+		spark.look_at(destination, Vector3.UP)
+		var tween := spark.create_tween()
+		tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		tween.tween_property(spark, "global_position", destination, 0.32 if intense else 0.22)
+		tween.parallel().tween_property(spark, "scale", Vector3.ZERO, 0.38 if intense else 0.27)
+		tween.tween_callback(spark.queue_free)
 
 func _keep_inside_ring() -> void:
 	var flat := Vector2(global_position.x, global_position.z)

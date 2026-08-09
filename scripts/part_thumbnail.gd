@@ -37,8 +37,13 @@ func _draw() -> void:
 			_draw_weapon(center, color, dark)
 	draw_circle(Vector2(size.x - 8.0, 7.0), 4.2, color)
 	if locked:
-		draw_rect(Rect2(center + Vector2(-7.0, -1.0), Vector2(14.0, 12.0)), Color("d9172038"), true)
-		draw_arc(center + Vector2(0.0, -1.0), 5.0, PI, TAU, 10, Color("fff1bd"), 2.0)
+		draw_rect(Rect2(Vector2.ZERO, size), Color("d90c101c"), true)
+		for stripe_x in range(-40, 80, 12):
+			draw_line(Vector2(float(stripe_x), size.y), Vector2(float(stripe_x + 38), 0.0), Color("38ff537f"), 3.0)
+		draw_rect(Rect2(Vector2(1.0, 1.0), size - Vector2(2.0, 2.0)), Color("ff537f"), false, 2.5)
+		draw_rect(Rect2(center + Vector2(-9.0, -1.0), Vector2(18.0, 15.0)), Color("ef24162c"), true)
+		draw_arc(center + Vector2(0.0, -1.0), 6.5, PI, TAU, 14, Color("fff1bd"), 3.0)
+		draw_circle(center + Vector2(0.0, 6.0), 2.0, Color("fff1bd"))
 
 func _draw_head(center: Vector2, color: Color, dark: Color) -> void:
 	var width := 20.0 + float(option_index % 4) * 2.2

@@ -6,10 +6,13 @@ const SFX_VOLUMES := {
 	"ui": -12.0,
 	"select": -8.0,
 	"join": -5.0,
+	"unlock": -2.0,
 	"step": -13.0,
 	"swing": -7.0,
 	"hit": -3.0,
 	"heavy": -1.0,
+	"joint": -2.0,
+	"detach": 0.0,
 	"shot": -5.0,
 	"countdown": -7.0,
 	"victory": -2.0,
@@ -60,10 +63,13 @@ func _create_sound_bank() -> void:
 	streams.ui = _make_tone(520.0, 0.055, 18.0, "square", 0.45, 0.0)
 	streams.select = _make_tone(760.0, 0.085, 12.0, "sine", 0.62, 280.0)
 	streams.join = _make_tone(180.0, 0.28, 7.0, "metal", 0.76, 720.0)
+	streams.unlock = _make_chord([659.25, 830.61, 987.77], 0.48, 7.0)
 	streams.step = _make_tone(82.0, 0.10, 24.0, "noise", 0.55, -24.0)
 	streams.swing = _make_tone(260.0, 0.15, 13.0, "noise", 0.52, 520.0)
 	streams.hit = _make_tone(95.0, 0.18, 18.0, "metal", 0.88, -45.0)
 	streams.heavy = _make_tone(62.0, 0.34, 11.0, "metal", 0.96, -24.0)
+	streams.joint = _make_tone(138.0, 0.24, 8.0, "metal", 0.92, -86.0)
+	streams.detach = _make_tone(74.0, 0.48, 6.5, "metal", 1.0, -28.0)
 	streams.shot = _make_tone(940.0, 0.22, 11.0, "saw", 0.58, -640.0)
 	streams.countdown = _make_tone(440.0, 0.12, 10.0, "square", 0.55, 80.0)
 	streams.victory = _make_chord([523.25, 659.25, 783.99], 0.72, 4.5)

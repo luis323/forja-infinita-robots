@@ -23,16 +23,21 @@ Construyes un robot sobre un pedestal y después lo ves pelear automáticamente 
 - Arena CPU infinita: empieza fácil, desbloquea más variedad y aumenta su potencia sin límite.
 - Multijugador local por turnos para 2 personas.
 - Multijugador LAN de 2 a 4 teléfonos en el mismo Wi-Fi mediante IP local y puerto 27841.
-- Golpe fuerte manual por jugador: persigue al objetivo, impacta de forma garantizada al alcanzarlo y después entra en recarga.
+- Botón manual para usar la herramienta equipada: persigue al objetivo y daña de forma determinista una unión concreta.
+- Desarme mecánico: armas, brazos o cabeza pueden desprenderse físicamente; piernas y torso nunca se separan.
+- Cada pieza perdida aplica desventajas reales de potencia, alcance, velocidad de ataque, precisión, movimiento o estabilidad.
+- Herramientas con comportamiento propio: sierras, espadas y tijeras cortan mejor; martillos y palas arrancan primero las armas.
 - Modo Historia con créditos, recompensas por victoria o intento, precios y compras guardadas.
+- Las compras muestran una animación luminosa de desbloqueo y las piezas bloqueadas usan un aviso rojo de alto contraste.
 - En VS local y LAN las 160 piezas están desbloqueadas desde el principio.
-- Combate automático dinámico con persecución, esquivas, embestidas, golpes encadenados, ataques a distancia, críticos, sobrecargas, retroceso y límite de tiempo.
-- Animación de hombros, codos, caderas y rodillas, orientación correcta hacia el rival, cámara móvil, destellos y sacudida en impactos.
+- Combate automático más pesado con persecución, esquivas, embestidas, golpes encadenados, ataques a distancia, críticos, sobrecargas, retroceso y 90 segundos de límite.
+- Animación de hombros, codos, caderas y rodillas, orientación correcta, cámara móvil, grandes ráfagas de chispas, piezas que salen despedidas y sacudida en impactos.
 - Música de pelea y efectos de interfaz, montaje, pasos, ataques, disparos, impactos y resultados; todo se genera dentro del juego y no depende de archivos externos.
 - Ring 3D con plataforma, esquinas, postes, tres cuerdas por lado, luces y colores de cada equipo.
 - Guardado del nivel CPU, récord, victorias y último robot.
 - Interfaz táctil; no necesita teclado para jugar.
-- Modo x2 durante los combates.
+- Robot de construcción 38% más grande, cámara cercana y paneles laterales estrechos para verlo casi a pantalla completa.
+- Modo x2 durante los combates de Historia y VS local.
 - Todo el arte 3D se genera con geometría propia: no necesita descargar recursos externos.
 
 ## Ejecutar en PC
@@ -58,10 +63,10 @@ El flujo valida el proyecto, ejecuta una prueba interna del catálogo y del mont
 - `scripts/main.gd`: estados, taller, UI, ring, modos, progreso y flujo completo.
 - `scripts/robot_catalog.gd`: las 20 opciones por espacio, estadísticas y sinergias.
 - `scripts/robot_model.gd`: construcción visual procedural y animaciones.
-- `scripts/fighter.gd`: inteligencia de combate automático.
+- `scripts/fighter.gd`: inteligencia, daño de articulaciones, desarme y penalizaciones.
 - `scripts/robot_audio.gd`: música y efectos generados por código.
 - `scripts/part_thumbnail.gd`: miniaturas procedurales del selector.
-- `scripts/lan_manager.gd`: sala LAN, intercambio de robots e instrucciones de golpe fuerte.
+- `scripts/lan_manager.gd`: sala LAN, intercambio de robots e instrucciones del ataque manual.
 - `scenes/main.tscn`: escena de arranque mínima.
 - `.github/workflows/build-android.yml`: compilación automática del APK.
 

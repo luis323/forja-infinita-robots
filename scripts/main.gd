@@ -31,7 +31,7 @@ var total_wins := 0
 var credits := 600
 var unlocked_parts := {}
 var last_reward := 0
-var battle_time_left := 75.0
+var battle_time_left := 90.0
 var battle_started := false
 var battle_finished := false
 var last_winner := -1
@@ -72,6 +72,9 @@ var fighter_hp_texts: Array[Label] = []
 var heavy_buttons: Array[Button] = []
 var lan_status_label: Label
 var lan_start_button: Button
+var speed_button: Button
+var recently_unlocked_slot := ""
+var recently_unlocked_index := -1
 
 func _ready() -> void:
 	Engine.time_scale = 1.0
@@ -204,6 +207,7 @@ func _show_main_menu() -> void:
 	_clear_ui()
 	_show_workshop_preview(Catalog.random_build(19), Vector3(2.85, 0.0, 0.0), BLUE)
 	camera.position = Vector3(0.0, 5.4, 13.4)
+	camera.fov = 54.0
 	camera.look_at(Vector3(0.8, 2.45, 0.0), Vector3.UP)
 
 	var panel := PanelContainer.new()
@@ -271,9 +275,12 @@ func _start_builder() -> void:
 	selected_slot = "head"
 	_clear_ui()
 	var tint: Color = TEAM_COLORS[clampi(current_builder - 1, 0, 3)]
-	_show_workshop_preview(current_build, Vector3(-3.35, 0.0, 0.0), tint)
-	camera.position = Vector3(0.0, 5.15, 13.8)
-	camera.look_at(Vector3(-1.25, 2.4, 0.0), Vector3.UP)
+	_show_workshop_preview(current_build, Vector3(-0.80, 0.0, 0.0), tint)
+	preview_robot.scale = Vector3.ONE * 1.38
+	preview_robot.remember_floor_height()
+	camera.position = Vector3(-0.25, 4.90, 10.85)
+	camera.fov = 46.0
+	camera.look_at(Vector3(-0.80, 2.75, 0.0), Vector3.UP)
 	_build_builder_ui()
 	_refresh_options()
 	_update_build_info()
@@ -306,7 +313,7 @@ func _build_builder_ui() -> void:
 	top_row.add_child(_make_button("SALIR", _show_main_menu, Color("60759a"), Vector2(110, 52)))
 
 	var right_panel := PanelContainer.new()
-	right_panel.anchor_left = 0.555
+	right_panel.anchor_left = 0.645
 	right_panel.anchor_top = 0.145
 	right_panel.anchor_right = 0.99
 	right_panel.anchor_bottom = 0.985
@@ -347,8 +354,8 @@ func _build_builder_ui() -> void:
 	var stats_panel := PanelContainer.new()
 	stats_panel.anchor_left = 0.012
 	stats_panel.anchor_top = 0.17
-	stats_panel.anchor_right = 0.255
-	stats_panel.anchor_bottom = 0.90
+	stats_panel.anchor_right = 0.215
+	stats_panel.anchor_bottom = 0.94
 	stats_panel.add_theme_stylebox_override("panel", _panel_style(PANEL, 18))
 	ui_root.add_child(stats_panel)
 	var stat_box := VBoxContainer.new()
@@ -395,6 +402,8 @@ func _select_option(index: int) -> void:
 			return
 		credits -= price
 		_unlock_part(selected_slot, index)
+		recently_unlocked_slot = selected_slot
+		recently_unlocked_index = index
 		_save_progress()
 	current_build[selected_slot] = index
 	if audio:
@@ -415,13 +424,23 @@ func _refresh_options() -> void:
 	var names := Catalog.names_for(selected_slot)
 	for index in range(20):
 		var locked := game_mode == "story" and not _is_part_unlocked(selected_slot, index)
+		var just_unlocked := selected_slot == recently_unlocked_slot and index == recently_unlocked_index
 		var prefix := "✓ " if index == chosen else ""
-		var price_text := "\n🔒 %d C" % Catalog.part_price(selected_slot, index) if locked else ""
-		var button := _make_button("\n\n" + prefix + str(names[index]) + price_text, _select_option.bind(index), GOLD if index == chosen else Color("52688f"), Vector2(92, 68))
+		var button_text := "\n\n" + prefix + str(names[index])
+		if locked:
+			button_text = "\n\n🔒 BLOQUEADA\n%d C" % Catalog.part_price(selected_slot, index)
+		elif just_unlocked:
+			button_text = "\n\n✨ DESBLOQUEADA\n" + str(names[index])
+		var button_color := Color("852d45") if locked else (GOLD if index == chosen else Color("52688f"))
+		var button := _make_button(button_text, _select_option.bind(index), button_color, Vector2(92, 72))
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		button.add_theme_font_size_override("font_size", 10)
+		button.add_theme_font_size_override("font_size", 9 if locked else 10)
 		button.clip_text = true
-		button.tooltip_text = str(names[index])
+		button.tooltip_text = "%s · BLOQUEADA · TOCA PARA COMPRAR" % names[index] if locked else str(names[index])
+		if locked:
+			button.add_theme_color_override("font_color", Color("ffd2d9"))
+			button.add_theme_stylebox_override("normal", _locked_button_style())
+			button.add_theme_stylebox_override("hover", _locked_button_style(true))
 		var thumbnail := ThumbnailScript.new()
 		button.add_child(thumbnail)
 		thumbnail.anchor_left = 0.5
@@ -432,10 +451,43 @@ func _refresh_options() -> void:
 		thumbnail.offset_bottom = 43.0
 		thumbnail.setup(selected_slot, index, index == chosen, locked)
 		options_grid.add_child(button)
+		if just_unlocked:
+			button.set_meta("unlock_ready", true)
+			call_deferred("_animate_unlock_button", button)
+	recently_unlocked_slot = ""
+	recently_unlocked_index = -1
 	for slot in slot_buttons:
 		var slot_button: Button = slot_buttons[slot]
 		slot_button.modulate = Color.WHITE if slot == selected_slot else Color("b7c4dd")
 	option_detail_label.text = Catalog.describe_option(selected_slot, chosen)
+
+func _locked_button_style(hover := false) -> StyleBoxFlat:
+	var style := _button_style(Color("6e172b") if hover else Color("3b101d"), Color("ff537f") if hover else Color("a33a55"), 3)
+	style.shadow_color = Color("90000000")
+	style.shadow_size = 5
+	return style
+
+func _animate_unlock_button(button: Button) -> void:
+	if not is_instance_valid(button) or not button.has_meta("unlock_ready"):
+		return
+	button.pivot_offset = button.size * 0.5
+	button.scale = Vector2(0.70, 0.70)
+	button.modulate = Color("fff173")
+	var flash := ColorRect.new()
+	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	flash.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	flash.color = Color("80fff173")
+	button.add_child(flash)
+	var tween := button.create_tween()
+	tween.set_parallel(true)
+	tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tween.tween_property(button, "scale", Vector2(1.10, 1.10), 0.28)
+	tween.tween_property(button, "modulate", Color.WHITE, 0.46)
+	tween.tween_property(flash, "color:a", 0.0, 0.46)
+	tween.chain().tween_property(button, "scale", Vector2.ONE, 0.16)
+	tween.chain().tween_callback(flash.queue_free)
+	if audio:
+		audio.play_sfx("unlock", 1.0)
 
 func _update_build_info() -> void:
 	if not stats_label:
@@ -563,7 +615,7 @@ func _start_battle() -> void:
 	camera_shake = 0.0
 	battle_started = false
 	battle_finished = false
-	battle_time_left = 75.0
+	battle_time_left = 90.0
 	last_winner = -1
 	_clear_ui()
 	_clear_preview()
@@ -571,6 +623,7 @@ func _start_battle() -> void:
 	ring_root.visible = true
 	_clear_fighters()
 	camera.position = Vector3(0.0, 8.9, 14.2)
+	camera.fov = 54.0
 	camera.look_at(Vector3(0.0, 1.8, 0.0), Vector3.UP)
 
 	var battle_builds: Array[Dictionary] = player_builds.duplicate(true)
@@ -638,7 +691,7 @@ func _build_battle_ui(names: Array[String]) -> void:
 	ui_root.add_child(top)
 	var outer := VBoxContainer.new()
 	top.add_child(outer)
-	battle_clock = _title_label("75", 29, GOLD)
+	battle_clock = _title_label("90", 29, GOLD)
 	battle_clock.custom_minimum_size = Vector2(0, 32)
 	outer.add_child(battle_clock)
 	var row := HBoxContainer.new()
@@ -680,7 +733,8 @@ func _build_battle_ui(names: Array[String]) -> void:
 	controls.add_theme_constant_override("separation", 8)
 	ui_root.add_child(controls)
 	if game_mode != "lan":
-		controls.add_child(_make_button("x1 / x2", _toggle_battle_speed, Color("9d88ff"), Vector2(115, 48)))
+		speed_button = _make_button("VELOCIDAD x1", _toggle_battle_speed, Color("9d88ff"), Vector2(150, 48))
+		controls.add_child(speed_button)
 	controls.add_child(_make_button("SALIR", _show_main_menu, Color("60759a"), Vector2(130, 48)))
 	var heavy_row := HBoxContainer.new()
 	heavy_row.anchor_left = 0.015
@@ -699,7 +753,7 @@ func _build_battle_ui(names: Array[String]) -> void:
 	else:
 		controllable.append(0)
 	for index in controllable:
-		var button := _make_button("GOLPE FUERTE J%d" % (index + 1), _request_heavy.bind(index), TEAM_COLORS[index], Vector2(190, 56))
+		var button := _make_button("USAR ARMA J%d" % (index + 1), _request_heavy.bind(index), TEAM_COLORS[index], Vector2(218, 60))
 		button.set_meta("fighter_index", index)
 		heavy_row.add_child(button)
 		heavy_buttons.append(button)
@@ -715,7 +769,7 @@ func _trigger_heavy(fighter_index: int) -> void:
 		return
 	var fighter := fighters[fighter_index]
 	if is_instance_valid(fighter) and not fighter.request_heavy_attack():
-		_show_battle_message("GOLPE FUERTE RECARGANDO", Color("c4cfdd"))
+		_show_battle_message("HERRAMIENTA NO DISPONIBLE O RECARGANDO", Color("c4cfdd"))
 
 func _update_heavy_buttons() -> void:
 	for button in heavy_buttons:
@@ -726,8 +780,9 @@ func _update_heavy_buttons() -> void:
 		if not is_instance_valid(fighter):
 			button.disabled = true
 			continue
-		button.disabled = fighter.hp <= 0.0
-		button.text = "GOLPE FUERTE J%d%s" % [fighter_index + 1, " · %.1fs" % fighter.heavy_cooldown if fighter.heavy_cooldown > 0.05 else " · ¡LISTO!"]
+		button.disabled = fighter.hp <= 0.0 or not fighter.has_manual_weapon()
+		var action_name := fighter.manual_action_label()
+		button.text = "%s J%d%s" % [action_name, fighter_index + 1, " · %.1fs" % fighter.heavy_cooldown if fighter.heavy_cooldown > 0.05 else " · ¡LISTO!"]
 
 func _countdown() -> void:
 	var pitch := 0.82
@@ -748,6 +803,19 @@ func _on_fighter_sfx(kind: String, pitch: float) -> void:
 
 func _on_fighter_impact(strength: float, _impact_position: Vector3) -> void:
 	camera_shake = maxf(camera_shake, clampf(strength, 0.08, 0.46))
+	if strength >= 0.42:
+		camera.fov = 47.0
+		var camera_tween := camera.create_tween()
+		camera_tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		camera_tween.tween_property(camera, "fov", 54.0, 0.62)
+		var flash := ColorRect.new()
+		flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		flash.color = Color("38fff4b0")
+		ui_root.add_child(flash)
+		flash.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		var flash_tween := flash.create_tween()
+		flash_tween.tween_property(flash, "color:a", 0.0, 0.20)
+		flash_tween.tween_callback(flash.queue_free)
 
 func _on_health_changed(id: int, ratio: float, current: float, maximum: float) -> void:
 	if id >= 0 and id < fighter_hp_bars.size():
@@ -841,7 +909,7 @@ func _show_results() -> void:
 			box.add_child(_make_button("↻  REINTENTAR NIVEL %d" % cpu_level, _retry_cpu_battle, RED, Vector2(540, 64)))
 		box.add_child(_make_button("🔧  VOLVER AL TALLER", _rebuild_from_result, Color("9d88ff"), Vector2(540, 58)))
 	elif game_mode == "local":
-		var local_info := _label("Los robots pelearon con sus estadísticas y afinidades.\nEl golpe fuerte permitió intervenir sin depender del azar.", 20, INK)
+		var local_info := _label("Los robots pelearon con sus estadísticas, afinidades y piezas restantes.\nUsar la herramienta en el momento correcto puede cambiar toda la pelea.", 20, INK)
 		local_info.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		box.add_child(local_info)
 		box.add_child(_make_button("↻  REVANCHA CON LOS MISMOS ROBOTS", _local_rematch, BLUE, Vector2(540, 64)))
@@ -877,6 +945,8 @@ func _restart_local_build() -> void:
 func _toggle_battle_speed() -> void:
 	battle_speed = 2.0 if battle_speed < 1.5 else 1.0
 	Engine.time_scale = battle_speed
+	if speed_button:
+		speed_button.text = "VELOCIDAD x%d" % int(battle_speed)
 	_show_battle_message("VELOCIDAD x%d" % int(battle_speed), Color("9d88ff"))
 
 func _show_battle_message(message: String, color: Color) -> void:
@@ -906,7 +976,8 @@ func _show_help() -> void:
 		"1. ARMA Y REVISA LAS 10 BARRAS\nVida, daño, blindaje, movimiento, ataque, alcance, energía, precisión, estabilidad y peso cambian con cada pieza.\n\n" +
 		"2. USA LAS AFINIDADES\nHidráulico > Térmico > Criógeno > Mineral > Eléctrico > Hidráulico. Una ventaja causa más daño.\n\n" +
 		"3. HISTORIA Y TIENDA\nGana créditos peleando contra la CPU y toca una pieza bloqueada para comprarla.\n\n" +
-		"4. GOLPE FUERTE\nTú decides cuándo lanzarlo. Siempre impacta al alcanzar al objetivo, pero necesita recargarse.\n\n" +
+		"4. USA TU HERRAMIENTA\nEl botón activa el arma equipada contra una unión. Puede desprender armas, brazos o cabeza; nunca piernas ni torso. Cada pérdida reduce estadísticas.\n\n" +
+		"5. RITMO DEL COMBATE\nLa pelea base es pesada y mecánica. En Historia y VS local puedes alternar VELOCIDAD x1/x2.\n\n" +
 		"VS Y LAN\nEn VS están las 160 piezas desbloqueadas. En LAN pueden conectar de 2 a 4 teléfonos al mismo Wi-Fi.",
 		17,
 		INK
@@ -973,6 +1044,7 @@ func _clear_ui() -> void:
 	heavy_buttons.clear()
 	lan_status_label = null
 	lan_start_button = null
+	speed_button = null
 
 func _build_workshop() -> void:
 	_mesh_box(workshop_root, Vector3(22.0, 0.45, 16.0), Color("101a35"), Vector3(0.0, -0.32, 0.0), 0.45)
@@ -981,8 +1053,8 @@ func _build_workshop() -> void:
 		_mesh_box(workshop_root, Vector3(0.10, 8.0, 0.18), BLUE.darkened(0.25), Vector3(x, 4.2, -4.72), 0.1, true)
 	for y in [1.0, 3.0, 5.0, 7.0]:
 		_mesh_box(workshop_root, Vector3(19.0, 0.08, 0.15), Color("704dff"), Vector3(0.0, y, -4.70), 0.1, true)
-	_mesh_cylinder(workshop_root, 2.75, 0.42, Color("283965"), Vector3(-3.35, -0.02, 0.0), false)
-	_mesh_cylinder(workshop_root, 2.38, 0.55, BLUE.darkened(0.35), Vector3(-3.35, 0.18, 0.0), true)
+	_mesh_cylinder(workshop_root, 3.05, 0.42, Color("283965"), Vector3(-0.80, -0.02, 0.0), false)
+	_mesh_cylinder(workshop_root, 2.68, 0.55, BLUE.darkened(0.35), Vector3(-0.80, 0.18, 0.0), true)
 	_mesh_cylinder(workshop_root, 2.50, 0.38, Color("283965"), Vector3(2.85, -0.02, 0.0), false)
 	_mesh_cylinder(workshop_root, 2.14, 0.50, Color("5e4dff").darkened(0.30), Vector3(2.85, 0.16, 0.0), true)
 	for x in [-7.0, 6.6]:
@@ -1231,5 +1303,8 @@ func _run_smoke_test() -> void:
 	var hp_before: float = fighter_test_b.hp
 	fighter_test_b.take_damage(50.0, fighter_test_a.global_position, false)
 	passed = passed and fighter_test_b.hp < hp_before
-	print("FORJA_SMOKE_TEST:", "PASS" if passed else "FAIL", " slots=", Catalog.SLOTS.size(), " options=160 stats=10 affinities=5 LAN=4 combat=OK")
+	var parts_before: int = fighter_test_b.model.part_roots.size()
+	fighter_test_b.take_tool_hit(200.0, fighter_test_a.global_position, 2, true)
+	passed = passed and fighter_test_b.model.part_roots.size() < parts_before
+	print("FORJA_SMOKE_TEST:", "PASS" if passed else "FAIL", " slots=", Catalog.SLOTS.size(), " options=160 stats=10 affinities=5 LAN=4 combat=OK detach=OK")
 	get_tree().quit(0 if passed else 1)
