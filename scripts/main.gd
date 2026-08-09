@@ -3,6 +3,7 @@ extends Node
 const Catalog = preload("res://scripts/robot_catalog.gd")
 const RobotModelScript = preload("res://scripts/robot_model.gd")
 const FighterScript = preload("res://scripts/fighter.gd")
+const AudioScript = preload("res://scripts/robot_audio.gd")
 
 enum GameState { MENU, TIME_SELECT, BUILD, BATTLE, RESULT, HELP }
 
@@ -29,8 +30,12 @@ var battle_started := false
 var battle_finished := false
 var last_winner := -1
 var battle_speed := 1.0
+var preview_time := 0.0
+var battle_camera_time := 0.0
+var camera_shake := 0.0
 
 var camera: Camera3D
+var audio: RobotAudio
 var workshop_root: Node3D
 var ring_root: Node3D
 var preview_robot: RobotModel
@@ -56,6 +61,8 @@ func _ready() -> void:
 	Engine.time_scale = 1.0
 	_load_progress()
 	Catalog.validate_catalog()
+	audio = AudioScript.new()
+	add_child(audio)
 	_setup_world()
 	_setup_ui_layer()
 	var args := OS.get_cmdline_user_args()
@@ -66,7 +73,13 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	if is_instance_valid(preview_robot) and state in [GameState.MENU, GameState.TIME_SELECT, GameState.BUILD, GameState.HELP]:
-		preview_robot.rotation.y += delta * (0.32 if state == GameState.BUILD else 0.52)
+		preview_time += delta
+		if state == GameState.BUILD:
+			preview_robot.rotation.y = lerpf(preview_robot.rotation.y, sin(preview_time * 0.72) * 0.18, minf(1.0, delta * 4.0))
+		else:
+			preview_robot.rotation.y += delta * 0.48
+	if state == GameState.BATTLE and is_instance_valid(fighter_a) and is_instance_valid(fighter_b):
+		_update_battle_camera(delta)
 	if state == GameState.BUILD and build_duration > 0.0:
 		build_time_left = maxf(0.0, build_time_left - delta)
 		_update_timer_label()
@@ -78,6 +91,21 @@ func _process(delta: float) -> void:
 			battle_clock.text = "%02d" % int(ceil(battle_time_left))
 		if battle_time_left <= 0.0:
 			_finish_by_time()
+
+func _update_battle_camera(delta: float) -> void:
+	battle_camera_time += delta
+	var midpoint := (fighter_a.global_position + fighter_b.global_position) * 0.5
+	midpoint.y = 2.15
+	var separation := fighter_a.global_position.distance_to(fighter_b.global_position)
+	var orbit := sin(battle_camera_time * 0.28) * 0.34
+	var distance := clampf(12.8 + separation * 0.20, 13.4, 16.0)
+	var desired := midpoint + Vector3(sin(orbit) * distance, 7.2 + sin(battle_camera_time * 0.55) * 0.35, cos(orbit) * distance)
+	if camera_shake > 0.01:
+		var shake_offset := Vector3(sin(battle_camera_time * 71.0), cos(battle_camera_time * 83.0), sin(battle_camera_time * 97.0)) * camera_shake
+		desired += shake_offset
+		camera_shake = maxf(0.0, camera_shake - delta * 2.8)
+	camera.position = camera.position.lerp(desired, minf(1.0, delta * 2.7))
+	camera.look_at(midpoint, Vector3.UP)
 
 func _setup_world() -> void:
 	var world_environment := WorldEnvironment.new()
@@ -236,7 +264,7 @@ func _build_builder_ui() -> void:
 	top_row.add_child(_make_button("SALIR", _show_main_menu, Color("60759a"), Vector2(110, 52)))
 
 	var right_panel := PanelContainer.new()
-	right_panel.anchor_left = 0.425
+	right_panel.anchor_left = 0.555
 	right_panel.anchor_top = 0.145
 	right_panel.anchor_right = 0.99
 	right_panel.anchor_bottom = 0.985
@@ -248,18 +276,17 @@ func _build_builder_ui() -> void:
 	var section_title := _label("ELIGE UNA PARTE", 25, GOLD)
 	section_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	outer.add_child(section_title)
-	var content := HBoxContainer.new()
-	content.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	content.add_theme_constant_override("separation", 10)
-	outer.add_child(content)
-	var slots := VBoxContainer.new()
-	slots.custom_minimum_size = Vector2(142, 0)
-	slots.add_theme_constant_override("separation", 4)
-	content.add_child(slots)
+	var slots := GridContainer.new()
+	slots.columns = 4
+	slots.add_theme_constant_override("h_separation", 5)
+	slots.add_theme_constant_override("v_separation", 5)
+	slots.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	outer.add_child(slots)
 	slot_buttons.clear()
 	for slot in Catalog.SLOTS:
-		var button := _make_button(Catalog.LABELS[slot], _select_slot.bind(slot), Color("4b638d"), Vector2(142, 47))
-		button.add_theme_font_size_override("font_size", 14)
+		var button := _make_button(Catalog.LABELS[slot], _select_slot.bind(slot), Color("4b638d"), Vector2(112, 40))
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.add_theme_font_size_override("font_size", 12)
 		slots.add_child(button)
 		slot_buttons[slot] = button
 	options_grid = GridContainer.new()
@@ -268,7 +295,7 @@ func _build_builder_ui() -> void:
 	options_grid.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	options_grid.add_theme_constant_override("h_separation", 5)
 	options_grid.add_theme_constant_override("v_separation", 5)
-	content.add_child(options_grid)
+	outer.add_child(options_grid)
 	option_detail_label = _label("", 15, Color("c5d6ee"))
 	option_detail_label.custom_minimum_size.y = 56
 	option_detail_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -276,19 +303,22 @@ func _build_builder_ui() -> void:
 	outer.add_child(_make_button("✓  TERMINAR Y ACTIVAR ROBOT", _finish_robot, GOLD, Vector2(0, 58)))
 
 	var stats_panel := PanelContainer.new()
-	stats_panel.anchor_left = 0.015
-	stats_panel.anchor_top = 0.15
-	stats_panel.anchor_right = 0.405
-	stats_panel.anchor_bottom = 0.42
+	stats_panel.anchor_left = 0.012
+	stats_panel.anchor_top = 0.17
+	stats_panel.anchor_right = 0.245
+	stats_panel.anchor_bottom = 0.69
 	stats_panel.add_theme_stylebox_override("panel", _panel_style(PANEL, 18))
 	ui_root.add_child(stats_panel)
 	var stat_box := VBoxContainer.new()
 	stats_panel.add_child(stat_box)
-	stats_label = _label("", 17, INK)
+	stats_label = _label("", 16, INK)
 	stats_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	stats_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	stat_box.add_child(stats_label)
-	synergy_label = _label("", 16, GOLD)
+	synergy_label = _label("", 14, GOLD)
 	synergy_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	synergy_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	synergy_label.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	stat_box.add_child(synergy_label)
 
 func _select_slot(slot: String) -> void:
@@ -297,6 +327,8 @@ func _select_slot(slot: String) -> void:
 
 func _select_option(index: int) -> void:
 	current_build[selected_slot] = index
+	if audio:
+		audio.play_sfx("join", 0.92 + float(index % 6) * 0.025)
 	var tint := BLUE if current_builder == 1 else RED
 	preview_robot.build_robot(current_build, tint, selected_slot)
 	preview_robot.remember_floor_height()
@@ -313,8 +345,9 @@ func _refresh_options() -> void:
 	var names := Catalog.names_for(selected_slot)
 	for index in range(20):
 		var prefix := "✓ " if index == chosen else "%02d " % (index + 1)
-		var button := _make_button(prefix + str(names[index]), _select_option.bind(index), GOLD if index == chosen else Color("52688f"), Vector2(124, 58))
-		button.add_theme_font_size_override("font_size", 13)
+		var button := _make_button(prefix + str(names[index]), _select_option.bind(index), GOLD if index == chosen else Color("52688f"), Vector2(108, 52))
+		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		button.add_theme_font_size_override("font_size", 12)
 		button.clip_text = true
 		button.tooltip_text = str(names[index])
 		options_grid.add_child(button)
@@ -327,7 +360,7 @@ func _update_build_info() -> void:
 	if not stats_label:
 		return
 	var stats := Catalog.build_stats(current_build)
-	stats_label.text = "VIDA  %.0f    POTENCIA  %.0f    BLINDAJE  %.0f\nVELOCIDAD  %.1f    ALCANCE  %.1f    ENERGÍA  %.0f" % [
+	stats_label.text = "VIDA  %.0f\nPOTENCIA  %.0f\nBLINDAJE  %.0f\nVELOCIDAD  %.1f\nALCANCE  %.1f\nENERGÍA  %.0f" % [
 		stats.health, stats.power, stats.armor, stats.speed, stats.range, stats.energy
 	]
 	var synergy := Catalog.get_synergy(current_build)
@@ -346,6 +379,8 @@ func _update_timer_label() -> void:
 
 func _randomize_build() -> void:
 	current_build = Catalog.random_build(19)
+	if audio:
+		audio.play_sfx("join", 0.82)
 	var tint := BLUE if current_builder == 1 else RED
 	preview_robot.build_robot(current_build, tint, selected_slot)
 	preview_robot.remember_floor_height()
@@ -369,6 +404,8 @@ func _start_battle() -> void:
 	state = GameState.BATTLE
 	Engine.time_scale = 1.0
 	battle_speed = 1.0
+	battle_camera_time = 0.0
+	camera_shake = 0.0
 	battle_started = false
 	battle_finished = false
 	battle_time_left = 75.0
@@ -408,9 +445,15 @@ func _start_battle() -> void:
 	fighter_b.defeated.connect(_on_fighter_defeated)
 	fighter_a.combat_event.connect(_show_battle_message)
 	fighter_b.combat_event.connect(_show_battle_message)
+	fighter_a.sfx_requested.connect(_on_fighter_sfx)
+	fighter_b.sfx_requested.connect(_on_fighter_sfx)
+	fighter_a.impact.connect(_on_fighter_impact)
+	fighter_b.impact.connect(_on_fighter_impact)
 	_build_battle_ui(name_b)
 	_on_health_changed(0, 1.0, fighter_a.hp, fighter_a.max_hp)
 	_on_health_changed(1, 1.0, fighter_b.hp, fighter_b.max_hp)
+	if audio:
+		audio.start_battle_music()
 	await _countdown()
 	if state != GameState.BATTLE:
 		return
@@ -472,11 +515,22 @@ func _build_battle_ui(name_b: String) -> void:
 	controls.add_child(_make_button("SALIR", _show_main_menu, Color("60759a"), Vector2(130, 48)))
 
 func _countdown() -> void:
+	var pitch := 0.82
 	for word in ["3", "2", "1"]:
 		if battle_message:
 			battle_message.text = word
 			battle_message.modulate = Color.WHITE
+		if audio:
+			audio.play_sfx("countdown", pitch)
+		pitch += 0.12
 		await get_tree().create_timer(0.62).timeout
+
+func _on_fighter_sfx(kind: String, pitch: float) -> void:
+	if audio:
+		audio.play_sfx(kind, pitch)
+
+func _on_fighter_impact(strength: float, _impact_position: Vector3) -> void:
+	camera_shake = maxf(camera_shake, clampf(strength, 0.08, 0.46))
 
 func _on_health_changed(id: int, ratio: float, current: float, maximum: float) -> void:
 	if id == 0 and hp_bar_a:
@@ -509,6 +563,9 @@ func _complete_battle() -> void:
 		return
 	battle_finished = true
 	battle_started = false
+	if audio:
+		audio.stop_music()
+		audio.play_sfx("victory" if last_winner == 0 else "defeat")
 	if is_instance_valid(fighter_a):
 		fighter_a.stop_fight()
 	if is_instance_valid(fighter_b):
@@ -642,6 +699,8 @@ func _clear_fighters() -> void:
 
 func _reset_runtime() -> void:
 	Engine.time_scale = 1.0
+	if audio:
+		audio.stop_music()
 	battle_started = false
 	battle_finished = false
 	_clear_fighters()
@@ -770,8 +829,13 @@ func _make_button(text: String, action: Callable, color: Color, minimum: Vector2
 	button.add_theme_stylebox_override("hover", _button_style(color.darkened(0.24), color, 3))
 	button.add_theme_stylebox_override("pressed", _button_style(color.darkened(0.55), Color.WHITE, 3))
 	button.add_theme_stylebox_override("focus", _button_style(color.darkened(0.38), GOLD, 3))
+	button.pressed.connect(_play_ui_sound)
 	button.pressed.connect(action)
 	return button
+
+func _play_ui_sound() -> void:
+	if audio:
+		audio.play_ui()
 
 func _button_style(background: Color, border: Color, width: int) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
@@ -862,6 +926,7 @@ func _run_smoke_test() -> void:
 	add_child(model_test)
 	model_test.build_robot(maximum_build, BLUE)
 	passed = passed and model_test.part_roots.size() == 8
+	passed = passed and audio.streams.has("battle_music") and audio.streams.size() >= 12
 	var fighter_test_a := FighterScript.new()
 	var fighter_test_b := FighterScript.new()
 	add_child(fighter_test_a)

@@ -11,13 +11,16 @@ Construyes un robot sobre un pedestal y después lo ves pelear automáticamente 
 - 8 espacios independientes: cabeza, torso, brazo izquierdo, brazo derecho, pierna izquierda, pierna derecha y un arma para cada mano.
 - 20 opciones en cada espacio: 160 elecciones catalogadas y 25.600.000.000 combinaciones posibles.
 - Piezas originales inspiradas en grandes arquetipos de robots, ciencia ficción y superhéroes, sin copiar personajes existentes.
+- Siluetas realmente distintas: brazos cortos, largos, delgados o pesados; ruedas, orugas, patas articuladas, visores, antenas, garras y accesorios únicos.
 - El robot se actualiza y sus piezas vuelan hacia el pedestal al seleccionarlas.
 - Estadísticas reales de vida, potencia, blindaje, velocidad, alcance y energía.
 - Sinergias: familias de piezas, armas gemelas, piernas sincronizadas y brazos sincronizados.
 - Tiempos de construcción de 30 segundos, 1 minuto, 2 minutos o sin límite.
 - Arena CPU infinita: empieza fácil, desbloquea más variedad y aumenta su potencia sin límite.
 - Multijugador local por turnos para 2 personas.
-- Combate automático con persecución, distancia táctica, ataques cuerpo a cuerpo y a distancia, críticos, sobrecargas, retroceso y límite de tiempo.
+- Combate automático dinámico con persecución, esquivas, embestidas, golpes encadenados, ataques a distancia, críticos, sobrecargas, retroceso y límite de tiempo.
+- Animación de hombros, codos, caderas y rodillas, orientación correcta hacia el rival, cámara móvil, destellos y sacudida en impactos.
+- Música de pelea y efectos de interfaz, montaje, pasos, ataques, disparos, impactos y resultados; todo se genera dentro del juego y no depende de archivos externos.
 - Ring 3D con plataforma, esquinas, postes, tres cuerdas por lado, luces y colores de cada equipo.
 - Guardado del nivel CPU, récord, victorias y último robot.
 - Interfaz táctil; no necesita teclado para jugar.
@@ -48,8 +51,8 @@ El flujo valida el proyecto, ejecuta una prueba interna del catálogo y del mont
 - `scripts/robot_catalog.gd`: las 20 opciones por espacio, estadísticas y sinergias.
 - `scripts/robot_model.gd`: construcción visual procedural y animaciones.
 - `scripts/fighter.gd`: inteligencia de combate automático.
+- `scripts/robot_audio.gd`: música y efectos generados por código.
 - `scenes/main.tscn`: escena de arranque mínima.
 - `.github/workflows/build-android.yml`: compilación automática del APK.
 
 No se incluyeron archivos de Sendas del Alba que este juego no utiliza.
-
