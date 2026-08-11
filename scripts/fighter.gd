@@ -20,6 +20,8 @@ const PART_LABELS := {
 }
 const PERSONALITY_NAMES := ["AGRESIVO", "TÁCTICO", "PESO PESADO", "ACROBÁTICO"]
 
+enum CombatTactic { CIRCLE, PRESS, RETREAT, FEINT, BURST, BRACE }
+
 var fighter_id := 0
 var build := {}
 var stats := {}
@@ -59,6 +61,10 @@ var _personality_actions := 0
 var _stagger_time := 0.0
 var _brace_time := 0.0
 var _received_hits := 0
+var _combat_tactic: int = CombatTactic.CIRCLE
+var _tactic_timer := 0.0
+var _disengage_timer := 0.0
+var _burst_time := 0.0
 
 func setup_robot(new_build: Dictionary, tint: Color, stat_multiplier: float, new_id: int, robot_name: String) -> void:
 	fighter_id = new_id
@@ -183,6 +189,9 @@ func begin_fight() -> void:
 	_auto_tool_timer = 3.6 + think_offset + float(personality_id) * 0.28
 	_stagger_time = 0.0
 	_brace_time = 0.0
+	_disengage_timer = 0.0
+	_burst_time = 0.0
+	_tactic_timer = 0.15 + think_offset
 	model.set_moving(false)
 
 func stop_fight() -> void:
@@ -202,6 +211,9 @@ func _physics_process(delta: float) -> void:
 	_personality_timer = maxf(0.0, _personality_timer - delta)
 	_stagger_time = maxf(0.0, _stagger_time - delta)
 	_brace_time = maxf(0.0, _brace_time - delta)
+	_disengage_timer = maxf(0.0, _disengage_timer - delta)
+	_burst_time = maxf(0.0, _burst_time - delta)
+	_tactic_timer = maxf(0.0, _tactic_timer - delta)
 	_target_timer = maxf(0.0, _target_timer - delta)
 	if _target_timer <= 0.0 or not is_instance_valid(opponent) or opponent.hp <= 0.0:
 		_choose_target()
@@ -227,6 +239,8 @@ func _physics_process(delta: float) -> void:
 	var distance := difference.length()
 	if distance > 0.05:
 		look_at(opponent.global_position, Vector3.UP, true)
+	if _tactic_timer <= 0.0:
+		_choose_combat_tactic(difference, distance)
 	var preferred_range := clampf(float(stats.range) * 0.70, 1.75, 5.4)
 	match personality_id:
 		0:
@@ -239,26 +253,43 @@ func _physics_process(delta: float) -> void:
 			preferred_range *= 1.04
 	var move_direction := Vector3.ZERO
 	var contact_range := _melee_contact_range()
-	if _manual_heavy_requested and distance > contact_range:
+	var forward: Vector3 = difference.normalized() if distance > 0.05 else Vector3.FORWARD
+	var side: Vector3 = forward.cross(Vector3.UP) * _strafe_direction
+	if _disengage_timer > 0.0:
+		move_direction = -forward * 0.92 + side * 0.62
+	elif _manual_heavy_requested and distance > contact_range:
 		move_direction = difference.normalized() * 1.42
 	elif distance > preferred_range:
-		move_direction = difference.normalized()
+		move_direction = forward
 	elif distance < preferred_range * 0.58:
-		move_direction = -difference.normalized() * 0.72
+		move_direction = -forward * 0.88 + side * 0.34
 	else:
-		var weave := 0.46 + sin(_motion_time * 2.8 + float(fighter_id) * 1.7) * 0.20
-		move_direction = difference.normalized().cross(Vector3.UP) * _strafe_direction * weave
-		move_direction += difference.normalized() * sin(_motion_time * 1.9) * 0.16
+		match _combat_tactic:
+			CombatTactic.CIRCLE:
+				move_direction = side * 0.92 + forward * sin(_motion_time * 2.4) * 0.12
+			CombatTactic.PRESS:
+				move_direction = forward * 1.12 + side * 0.22
+			CombatTactic.RETREAT:
+				move_direction = -forward * 0.90 + side * 0.54
+			CombatTactic.FEINT:
+				var feint_wave: float = sin(_motion_time * 7.0)
+				move_direction = forward * feint_wave * 0.86 + side * 0.68
+			CombatTactic.BURST:
+				move_direction = forward * 1.48 + side * 0.16
+			_:
+				move_direction = side * 0.30
 	if _maneuver_timer <= 0.0 and distance < preferred_range * 1.35:
-		var dodge_direction := difference.normalized().cross(Vector3.UP) * _strafe_direction
+		var dodge_direction := side
 		_impulse_velocity += dodge_direction * _rng.randf_range(2.4, 4.0)
+		model.play_maneuver(_strafe_direction, -0.25)
 		_strafe_direction *= -1.0
-		_maneuver_timer = _rng.randf_range(1.25, 2.35)
+		_maneuver_timer = _rng.randf_range(0.95, 1.85)
 	if _personality_timer <= 0.0 and distance < preferred_range * 1.65:
 		_perform_personality_action(difference)
 		_personality_timer = 1.65 + float((_personality_actions + fighter_id) % 4) * 0.34
 	var personality_speed: float = [1.08, 0.94, 0.78, 1.14][personality_id]
-	var movement_speed := float(stats.speed) * 0.82 * personality_speed * (0.72 if distance < preferred_range else 1.0)
+	var burst_multiplier: float = 1.30 if _burst_time > 0.0 else 1.0
+	var movement_speed := float(stats.speed) * 0.86 * personality_speed * burst_multiplier * (0.78 if distance < preferred_range else 1.0)
 	velocity = move_direction * movement_speed + _impulse_velocity
 	move_and_slide()
 	_keep_inside_ring()
@@ -269,8 +300,40 @@ func _physics_process(delta: float) -> void:
 		_step_timer = clampf(0.48 - float(stats.speed) * 0.025, 0.24, 0.40)
 	if _manual_heavy_requested and distance <= contact_range:
 		_perform_manual_heavy()
-	elif attack_cooldown <= 0.0 and distance <= float(stats.range):
+	elif attack_cooldown <= 0.0 and _can_attack_at_distance(distance):
 		_perform_attack(distance)
+
+func _choose_combat_tactic(difference: Vector3, distance: float) -> void:
+	if difference.length() < 0.05:
+		return
+	var roll: int = _rng.randi_range(0, 5)
+	if personality_id == 0 and roll in [2, 5]:
+		roll = 1
+	elif personality_id == 1 and roll == 1:
+		roll = 3
+	elif personality_id == 2 and roll in [3, 4]:
+		roll = 5
+	elif personality_id == 3 and roll == 5:
+		roll = 0
+	_combat_tactic = roll
+	_tactic_timer = _rng.randf_range(0.65, 1.35)
+	if _combat_tactic in [CombatTactic.CIRCLE, CombatTactic.FEINT]:
+		_strafe_direction *= -1.0 if _rng.randf() < 0.55 else 1.0
+	if _combat_tactic == CombatTactic.BURST:
+		_burst_time = 0.48
+		model.play_maneuver(_strafe_direction * 0.25, 1.0)
+	elif _combat_tactic == CombatTactic.RETREAT:
+		model.play_maneuver(_strafe_direction * 0.55, -1.0)
+	elif _combat_tactic == CombatTactic.FEINT:
+		model.play_maneuver(_strafe_direction, 0.25)
+	elif _combat_tactic == CombatTactic.BRACE and distance < _melee_contact_range() * 1.35:
+		_brace_time = maxf(_brace_time, 0.50)
+
+func _can_attack_at_distance(distance: float) -> bool:
+	var ranged_ready: bool = float(stats.range) >= 4.35 and (_side_available(true) or _side_available(false))
+	if ranged_ready:
+		return distance <= float(stats.range)
+	return distance <= _melee_contact_range() + 0.18
 
 func _choose_target() -> void:
 	var nearest: ArenaFighter
@@ -338,6 +401,7 @@ func _perform_attack(distance: float) -> void:
 	if not special and accuracy_roll > float(stats.accuracy):
 		combat_event.emit("¡CASI, %s!" % display_name if friendly_mode else "%s FALLA EL ATAQUE" % display_name, Color("d7e1ef"))
 		model.play_attack(use_left, false)
+		_disengage_timer = 0.34
 		attack_cooldown = maxf(0.42, 1.46 / float(stats.attack_speed))
 		return
 	var attack_affinity := Catalog.weapon_affinity(build, use_left) if has_weapon else Catalog.dominant_affinity(build)
@@ -400,6 +464,7 @@ func _resolve_melee_hit(victim: ArenaFighter, damage: float, special: bool, use_
 	var distance := global_position.distance_to(victim.global_position)
 	if distance > _melee_contact_range() + 0.70:
 		combat_event.emit("%s ESQUIVA POR POCO" % victim.display_name, victim.team_color)
+		_disengage_timer = 0.42
 		return
 	var impact_position := victim.model.get_part_world_position("torso")
 	impact_position += Vector3((-0.32 if use_left else 0.32), 0.10, 0.36)
@@ -407,7 +472,9 @@ func _resolve_melee_hit(victim: ArenaFighter, damage: float, special: bool, use_
 	var recoil := global_position - victim.global_position
 	recoil.y = 0.0
 	if recoil.length() > 0.05:
-		_impulse_velocity += recoil.normalized() * 1.8
+		_impulse_velocity += recoil.normalized() * (3.0 if special else 2.2)
+	_disengage_timer = 0.46 if combo_ready else _rng.randf_range(0.62, 1.02)
+	model.play_maneuver(_strafe_direction * 0.48, -0.55)
 	if combo_ready and victim.hp > 0.0:
 		get_tree().create_timer(0.24).timeout.connect(_combo_strike.bind(victim, damage * 0.28, global_position))
 
@@ -418,6 +485,8 @@ func _resolve_tool_hit(victim: ArenaFighter, damage: float, weapon_index: int, u
 		combat_event.emit("LA HERRAMIENTA DE %s NO ALCANZA" % display_name, Color("c4cfdd"))
 		return
 	victim.take_tool_hit(damage, global_position, weapon_index, use_left)
+	_disengage_timer = 1.05
+	model.play_maneuver(_strafe_direction * 0.65, -0.80)
 
 func _combo_strike(victim: ArenaFighter, damage: float, source_position: Vector3) -> void:
 	if not active or not is_instance_valid(victim) or victim.hp <= 0.0:

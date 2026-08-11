@@ -1,7 +1,7 @@
 [application]
 
 config/name="Forja Infinita: Robots Kids"
-config/description="Elige robots amistosos y juega desafios automaticos con un superpoder"
+config/description="Construye robots expresivos y disfruta combates dinámicos con IA"
 run/main_scene="res://scenes/main.tscn"
 config/features=PackedStringArray("4.4", "Mobile")
 config/icon="res://assets/icon.svg"

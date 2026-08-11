@@ -1,14 +1,15 @@
-# Forja Infinita: Robots Kids v1.6.0
+# Forja Infinita: Robots Kids v1.7.0
 
 Edición infantil independiente para Godot 4.4.1, Android ARM64 y PC. Usa un identificador Android diferente, por lo que puede instalarse junto a la edición normal.
 
 ## Modo fácil
 
-El modo principal está diseñado en tres pasos grandes y claros:
+El modo principal está diseñado en cuatro pasos grandes y claros:
 
-1. Elegir uno de cuatro robots preparados.
-2. Conocer al rival y comparar vida, fuerza y rapidez con puntos visuales.
-3. Jugar una partida automática usando un único botón grande de **Superpoder**.
+1. Elegir uno de cuatro robots preparados y cambiar sus piezas tocando el modelo.
+2. Escoger una expresión facial divertida.
+3. Conocer al rival y comparar vida, fuerza y rapidez con puntos visuales.
+4. Jugar una partida automática usando un único botón grande de **Superpoder**.
 
 ## Robots preparados
 
@@ -19,16 +20,22 @@ El modo principal está diseñado en tres pasos grandes y claros:
 
 ## Diseño infantil
 
-- Robot grande durante la elección, sin menús encima del modelo.
-- Selección directa: toca cabeza, torso, brazos, piernas o manos sobre el propio robot para abrir esa categoría.
+- Robot todavía más grande durante la elección, completamente visible y sin paneles encima del modelo.
+- Selección directa invisible: toca cabeza, torso, brazos, piernas o manos sobre el propio robot para abrir esa categoría sin taparlo.
 - Puedes volver a tocar cualquier zona y cambiarla todas las veces que quieras antes de comenzar.
 - El modo Kids ofrece solo cuatro piezas claras por zona; el Taller avanzado conserva las veinte.
 - Botón aleatorio grande y visible flotando justo encima del robot.
+- Selector de ocho expresiones faciales 3D: alegre, enojado, sorpresa, travieso, decidido, dormido, confundido y fiesta.
+- La expresión se guarda con la configuración y continúa visible dentro del ring.
+- Estadísticas trasladadas al panel lateral para dejar libre toda la vista del robot.
 - Botones táctiles grandes, textos cortos y colores diferentes para cada robot.
 - Rival presentado antes de cada partida con solo tres comparaciones importantes.
 - CPU inicial más fácil y dificultad progresiva.
 - Un solo control durante el juego: **Superpoder**.
 - Destellos de cinco colores en los impactos.
+- IA de combate compartida por Kids y adulto con rodeos, fintas, retiradas, cargas, bloqueos y esquivas laterales.
+- Los robots se separan después de atacar y cambian de distancia en lugar de permanecer pegados frente a frente.
+- Ataques con giro de torso, tres variantes de movimiento, impulso y recuperación.
 - Las piezas nunca se desprenden y los robots no muestran deterioro visual.
 - Un aro de luz suave sigue al robot de cada jugador dentro del ring; los rivales controlados por la CPU no lo tienen.
 - Al terminar, el robot que pierde simplemente se toma un descanso.
