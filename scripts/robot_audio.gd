@@ -6,6 +6,7 @@ const SFX_VOLUMES := {
 	"ui": -12.0,
 	"select": -8.0,
 	"join": -5.0,
+	"weld": -3.0,
 	"unlock": -2.0,
 	"step": -13.0,
 	"swing": -7.0,
@@ -74,6 +75,7 @@ func _create_sound_bank() -> void:
 	streams.ui = _make_tone(520.0, 0.055, 18.0, "square", 0.45, 0.0)
 	streams.select = _make_tone(760.0, 0.085, 12.0, "sine", 0.62, 280.0)
 	streams.join = _make_tone(180.0, 0.28, 7.0, "metal", 0.76, 720.0)
+	streams.weld = _make_tone(1280.0, 0.34, 7.5, "noise", 0.64, -520.0)
 	streams.unlock = _make_chord([659.25, 830.61, 987.77], 0.48, 7.0)
 	streams.step = _make_tone(82.0, 0.10, 24.0, "noise", 0.55, -24.0)
 	streams.swing = _make_tone(260.0, 0.15, 13.0, "noise", 0.52, 520.0)

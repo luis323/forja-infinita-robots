@@ -14,28 +14,30 @@ func setup(new_slot: String, new_index: int, is_selected: bool, is_locked: bool)
 	selected = is_selected
 	locked = is_locked
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	custom_minimum_size = Vector2(54.0, 42.0)
 	queue_redraw()
 
 func _draw() -> void:
 	var affinity: String = Catalog.AFFINITIES[option_index % Catalog.AFFINITIES.size()]
 	var color: Color = Catalog.AFFINITY_COLORS[affinity]
 	var dark := color.darkened(0.48)
-	var center := Vector2(size.x * 0.5, 20.0)
+	var center := Vector2(size.x * 0.5, size.y * 0.47)
+	var visual_scale: float = clampf(minf(size.x / 54.0, size.y / 48.0), 1.0, 2.75)
+	draw_set_transform(center, 0.0, Vector2.ONE * visual_scale)
 	if selected:
-		draw_circle(center, 19.0, Color(color, 0.16))
+		draw_circle(Vector2.ZERO, 19.0, Color(color, 0.20))
 	match slot:
 		"head":
-			_draw_head(center, color, dark)
+			_draw_head(Vector2.ZERO, color, dark)
 		"torso":
-			_draw_torso(center, color, dark)
+			_draw_torso(Vector2.ZERO, color, dark)
 		"left_arm", "right_arm":
-			_draw_arm(center, color, dark)
+			_draw_arm(Vector2.ZERO, color, dark)
 		"left_leg", "right_leg":
-			_draw_leg(center, color, dark)
+			_draw_leg(Vector2.ZERO, color, dark)
 		_:
-			_draw_weapon(center, color, dark)
-	draw_circle(Vector2(size.x - 8.0, 7.0), 4.2, color)
+			_draw_weapon(Vector2.ZERO, color, dark)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	draw_circle(Vector2(size.x - 10.0, 10.0), 5.2, color)
 	if locked:
 		draw_rect(Rect2(Vector2.ZERO, size), Color("d90c101c"), true)
 		for stripe_x in range(-40, 80, 12):

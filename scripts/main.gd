@@ -102,6 +102,7 @@ var stat_value_labels := {}
 var fighter_hp_bars: Array[ProgressBar] = []
 var fighter_hp_texts: Array[Label] = []
 var heavy_buttons: Array[Button] = []
+var advanced_action_buttons: Array[Button] = []
 var lan_status_label: Label
 var lan_start_button: Button
 var speed_button: Button
@@ -148,6 +149,7 @@ func _process(delta: float) -> void:
 	if state == GameState.BATTLE and fighters.size() >= 2:
 		_update_battle_camera(delta)
 		_update_heavy_buttons()
+		_update_advanced_action_buttons()
 	if state == GameState.BUILD and build_duration > 0.0:
 		build_time_left = maxf(0.0, build_time_left - delta)
 		_update_timer_label()
@@ -321,7 +323,7 @@ func _start_kids_mode() -> void:
 	current_build = selected_build.duplicate(true)
 	_show_kids_builder()
 
-func _show_kids_builder() -> void:
+func _show_kids_builder(animate_slot: String = "") -> void:
 	state = GameState.BUILD
 	battle_finished = false
 	build_duration = -1.0
@@ -329,6 +331,8 @@ func _show_kids_builder() -> void:
 	_clear_fighters()
 	var tint: Color = KIDS_ROBOT_COLORS[kids_preset_index]
 	_show_workshop_preview(current_build, Vector3(-1.55, 0.0, 0.0), tint)
+	if not animate_slot.is_empty():
+		preview_robot.build_robot(current_build, tint, animate_slot)
 	preview_robot.scale = Vector3.ONE * 1.68
 	preview_robot.remember_floor_height()
 	camera.position = Vector3(0.15, 5.0, 11.8)
@@ -349,9 +353,16 @@ func _show_kids_builder() -> void:
 	panel.anchor_bottom = 0.975
 	panel.add_theme_stylebox_override("panel", _panel_style(Color("e51c3157"), 26))
 	ui_root.add_child(panel)
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	panel.add_child(scroll)
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 7)
-	panel.add_child(box)
+	box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(box)
 	var robot_title: String = "MI ROBOT" if kids_is_custom else str(KIDS_ROBOT_NAMES[kids_preset_index])
 	box.add_child(_title_label(robot_title, 32, tint))
 	var tip_text: String = "Puedes volver a tocar cualquier parte y cambiarla otra vez." if kids_is_custom else str(KIDS_ROBOT_TIPS[kids_preset_index])
@@ -378,18 +389,18 @@ func _show_kids_builder() -> void:
 	box.add_child(part_title)
 	var part_choices := GridContainer.new()
 	part_choices.columns = 2
-	part_choices.add_theme_constant_override("h_separation", 7)
-	part_choices.add_theme_constant_override("v_separation", 7)
-	part_choices.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	part_choices.add_theme_constant_override("h_separation", 9)
+	part_choices.add_theme_constant_override("v_separation", 9)
+	part_choices.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	box.add_child(part_choices)
 	var part_names: Array = Catalog.names_for(selected_slot)
 	var chosen_index: int = int(current_build.get(selected_slot, 0))
 	for index in range(4):
 		var selected_prefix: String = "✓ " if index == chosen_index else ""
-		var part_button := _make_button(selected_prefix + str(part_names[index]), _select_kids_part.bind(index), GOLD if index == chosen_index else Color("52688f"), Vector2(205, 48))
+		var part_button := _make_button("", _select_kids_part.bind(index), GOLD if index == chosen_index else Color("52688f"), Vector2(178, 178))
 		part_button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		part_button.add_theme_font_size_override("font_size", 13)
-		part_button.clip_text = true
+		part_button.tooltip_text = str(part_names[index])
+		_decorate_part_tile(part_button, selected_slot, index, selected_prefix + str(part_names[index]), index == chosen_index, false, true)
 		part_choices.add_child(part_button)
 	var base_label := _label("O ELIGE UNA BASE RÁPIDA", 13, Color("ccecff"))
 	base_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -401,9 +412,10 @@ func _show_kids_builder() -> void:
 	box.add_child(choices)
 	for index in range(KIDS_ROBOT_NAMES.size()):
 		var prefix: String = "✓ " if not kids_is_custom and index == kids_preset_index else ""
-		var choice := _make_button(prefix + str(KIDS_ROBOT_NAMES[index]), _select_kids_preset.bind(index), KIDS_ROBOT_COLORS[index], Vector2(205, 36))
+		var choice := _make_button("", _select_kids_preset.bind(index), KIDS_ROBOT_COLORS[index], Vector2(142, 142))
 		choice.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		choice.add_theme_font_size_override("font_size", 13)
+		choice.tooltip_text = str(KIDS_ROBOT_TIPS[index])
+		_decorate_part_tile(choice, "torso", int(KIDS_PRESETS[index].torso), prefix + str(KIDS_ROBOT_NAMES[index]), not kids_is_custom and index == kids_preset_index, false, true)
 		choices.add_child(choice)
 	box.add_child(_make_button("▶  2 · ¡LISTO! VER A MI RIVAL", _finish_kids_robot, Color("54c987"), Vector2(0, 54)))
 	box.add_child(_make_button("←  MENÚ", _show_main_menu, Color("60759a"), Vector2(0, 34)))
@@ -428,7 +440,8 @@ func _select_kids_part(index: int) -> void:
 	kids_is_custom = true
 	if audio:
 		audio.play_sfx("join", 0.96 + float(index) * 0.04)
-	_show_kids_builder()
+		get_tree().create_timer(0.42).timeout.connect(audio.play_sfx.bind("weld", 0.96 + float(index) * 0.04))
+	_show_kids_builder(selected_slot)
 
 func _randomize_kids_build() -> void:
 	for slot_value in Catalog.SLOTS:
@@ -538,16 +551,18 @@ func _build_builder_ui() -> void:
 	outer.add_child(slots)
 	slot_buttons.clear()
 	for slot in Catalog.SLOTS:
-		var button := _make_button(Catalog.LABELS[slot], _select_slot.bind(slot), Color("4b638d"), Vector2(112, 40))
+		var slot_index: int = int(current_build.get(slot, 0))
+		var button := _make_button("", _select_slot.bind(slot), GOLD if slot == selected_slot else Color("4b638d"), Vector2(100, 100))
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		button.add_theme_font_size_override("font_size", 12)
+		button.tooltip_text = str(Catalog.LABELS[slot])
+		_decorate_part_tile(button, slot, slot_index, str(Catalog.LABELS[slot]), slot == selected_slot, false, false)
 		slots.add_child(button)
 		slot_buttons[slot] = button
 	_add_expression_selector(outer, false)
 	options_grid = GridContainer.new()
-	options_grid.columns = 5
+	options_grid.columns = 4
 	options_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	options_grid.custom_minimum_size.y = 263.0
+	options_grid.custom_minimum_size.y = 560.0
 	options_grid.add_theme_constant_override("h_separation", 5)
 	options_grid.add_theme_constant_override("v_separation", 5)
 	outer.add_child(options_grid)
@@ -608,10 +623,10 @@ func _add_expression_selector(parent: Control, kids_mode: bool) -> void:
 	parent.add_child(grid)
 	for index in range(EXPRESSION_LABELS.size()):
 		var selected_prefix: String = "✓ " if index == selected_expression else ""
-		var button_text: String = selected_prefix + str(EXPRESSION_ICONS[index]) + " " + str(EXPRESSION_LABELS[index])
-		var button := _make_button(button_text, _select_expression.bind(index, kids_mode), EXPRESSION_COLORS[index], Vector2(96, 32 if kids_mode else 28))
+		var button_text: String = selected_prefix + str(EXPRESSION_ICONS[index]) + "\n" + str(EXPRESSION_LABELS[index])
+		var button := _make_button(button_text, _select_expression.bind(index, kids_mode), EXPRESSION_COLORS[index], Vector2(88, 88))
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		button.add_theme_font_size_override("font_size", 10 if kids_mode else 8)
+		button.add_theme_font_size_override("font_size", 12 if kids_mode else 10)
 		button.clip_text = true
 		grid.add_child(button)
 
@@ -718,6 +733,7 @@ func _select_option(index: int) -> void:
 	current_build[selected_slot] = index
 	if audio:
 		audio.play_sfx("join", 0.92 + float(index % 6) * 0.025)
+		get_tree().create_timer(0.42).timeout.connect(audio.play_sfx.bind("weld", 0.92 + float(index % 6) * 0.025))
 	var tint: Color = TEAM_COLORS[clampi(current_builder - 1, 0, 3)]
 	preview_robot.build_robot(current_build, tint, selected_slot)
 	preview_robot.remember_floor_height()
@@ -736,30 +752,20 @@ func _refresh_options() -> void:
 		var locked := game_mode == "story" and not _is_part_unlocked(selected_slot, index)
 		var just_unlocked := selected_slot == recently_unlocked_slot and index == recently_unlocked_index
 		var prefix := "✓ " if index == chosen else ""
-		var button_text := "\n\n" + prefix + str(names[index])
+		var button_text := prefix + str(names[index])
 		if locked:
-			button_text = "\n\n🔒 BLOQUEADA\n%d C" % Catalog.part_price(selected_slot, index)
+			button_text = "🔒 %d C" % Catalog.part_price(selected_slot, index)
 		elif just_unlocked:
-			button_text = "\n\n✨ DESBLOQUEADA\n" + str(names[index])
+			button_text = "✨ " + str(names[index])
 		var button_color := Color("852d45") if locked else (GOLD if index == chosen else Color("52688f"))
-		var button := _make_button(button_text, _select_option.bind(index), button_color, Vector2(92, 62))
+		var button := _make_button("", _select_option.bind(index), button_color, Vector2(104, 104))
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		button.add_theme_font_size_override("font_size", 9 if locked else 10)
-		button.clip_text = true
 		button.tooltip_text = "%s · BLOQUEADA · TOCA PARA COMPRAR" % names[index] if locked else str(names[index])
 		if locked:
 			button.add_theme_color_override("font_color", Color("ffd2d9"))
 			button.add_theme_stylebox_override("normal", _locked_button_style())
 			button.add_theme_stylebox_override("hover", _locked_button_style(true))
-		var thumbnail := ThumbnailScript.new()
-		button.add_child(thumbnail)
-		thumbnail.anchor_left = 0.5
-		thumbnail.anchor_right = 0.5
-		thumbnail.offset_left = -27.0
-		thumbnail.offset_right = 27.0
-		thumbnail.offset_top = 1.0
-		thumbnail.offset_bottom = 37.0
-		thumbnail.setup(selected_slot, index, index == chosen, locked)
+		_decorate_part_tile(button, selected_slot, index, button_text, index == chosen, locked, false)
 		options_grid.add_child(button)
 		if just_unlocked:
 			button.set_meta("unlock_ready", true)
@@ -770,6 +776,26 @@ func _refresh_options() -> void:
 		var slot_button: Button = slot_buttons[slot]
 		slot_button.modulate = Color.WHITE if slot == selected_slot else Color("b7c4dd")
 	option_detail_label.text = Catalog.describe_option(selected_slot, chosen)
+
+func _decorate_part_tile(button: Button, slot: String, index: int, caption: String, selected: bool, locked: bool, kids_mode: bool) -> void:
+	var thumbnail := ThumbnailScript.new()
+	button.add_child(thumbnail)
+	thumbnail.anchor_left = 0.08
+	thumbnail.anchor_top = 0.05
+	thumbnail.anchor_right = 0.92
+	thumbnail.anchor_bottom = 0.73
+	thumbnail.setup(slot, index, selected, locked)
+	var caption_label := _label(caption, 12 if kids_mode else 9, Color("fff8d1") if selected else Color("eef6ff"))
+	caption_label.anchor_left = 0.05
+	caption_label.anchor_top = 0.73
+	caption_label.anchor_right = 0.95
+	caption_label.anchor_bottom = 0.98
+	caption_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	caption_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	caption_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	caption_label.clip_text = true
+	caption_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	button.add_child(caption_label)
 
 func _locked_button_style(hover := false) -> StyleBoxFlat:
 	var style := _button_style(Color("6e172b") if hover else Color("3b101d"), Color("ff537f") if hover else Color("a33a55"), 3)
@@ -1182,6 +1208,13 @@ func _start_battle() -> void:
 		ring_root.add_child(fighter)
 		fighter.position = spawn_positions[index]
 		fighter.friendly_mode = true
+		fighter.ai_difficulty = 1.0
+		if game_mode == "story" and index >= player_builds.size():
+			fighter.ai_difficulty = clampf(1.15 + float(cpu_level) * 0.025, 1.15, 1.48)
+		elif game_mode == "kids" and index >= player_builds.size():
+			fighter.ai_difficulty = clampf(1.00 + float(cpu_level) * 0.010, 1.00, 1.16)
+		elif game_mode != "kids":
+			fighter.ai_difficulty = 1.06
 		var fighter_tint: Color = KIDS_ROBOT_COLORS[kids_preset_index] if game_mode == "kids" and index == 0 else TEAM_COLORS[index]
 		fighter.setup_robot(battle_builds[index], fighter_tint, multipliers[index], index, names[index])
 		fighter.auto_tool_enabled = game_mode in ["story", "kids"] and index == 1
@@ -1336,14 +1369,17 @@ func _build_battle_ui(names: Array[String]) -> void:
 		speed_button = _make_button("VELOCIDAD x1", _toggle_battle_speed, Color("9d88ff"), Vector2(150, 48))
 		controls.add_child(speed_button)
 	controls.add_child(_make_button("MENÚ", _show_main_menu, Color("60759a"), Vector2(130, 48)))
-	var heavy_row := HBoxContainer.new()
+	var heavy_row := GridContainer.new()
 	heavy_row.anchor_left = 0.015
-	heavy_row.anchor_top = 0.87
-	heavy_row.anchor_right = 0.62
+	heavy_row.anchor_top = 0.87 if game_mode == "kids" else 0.79
+	heavy_row.anchor_right = 0.62 if game_mode == "kids" else 0.70
 	heavy_row.anchor_bottom = 0.98
-	heavy_row.add_theme_constant_override("separation", 8)
+	heavy_row.columns = 1 if game_mode in ["kids", "lan"] else 4
+	heavy_row.add_theme_constant_override("h_separation", 8)
+	heavy_row.add_theme_constant_override("v_separation", 6)
 	ui_root.add_child(heavy_row)
 	heavy_buttons.clear()
+	advanced_action_buttons.clear()
 	var controllable: Array[int] = _controlled_fighter_indexes()
 	for index in controllable:
 		var button_text: String = "✨  SUPERPODER" if game_mode == "kids" else "USAR ARMA J%d" % (index + 1)
@@ -1354,6 +1390,17 @@ func _build_battle_ui(names: Array[String]) -> void:
 		button.set_meta("fighter_index", index)
 		heavy_row.add_child(button)
 		heavy_buttons.append(button)
+		if game_mode not in ["kids", "lan"]:
+			for action_data in [["jump", "↥ SALTAR"], ["guard", "⬡ DEFENSA"], ["dash", "➜ IMPULSO"]]:
+				var action: String = str(action_data[0])
+				var base_text: String = "%s J%d" % [str(action_data[1]), index + 1]
+				var action_button := _make_button(base_text, _request_tactical_action.bind(index, action), Color("42679b"), Vector2(150, 46))
+				action_button.set_meta("fighter_index", index)
+				action_button.set_meta("action", action)
+				action_button.set_meta("base_text", base_text)
+				action_button.add_theme_font_size_override("font_size", 11)
+				heavy_row.add_child(action_button)
+				advanced_action_buttons.append(action_button)
 
 func _request_heavy(fighter_index: int) -> void:
 	if game_mode == "lan":
@@ -1367,6 +1414,13 @@ func _trigger_heavy(fighter_index: int) -> void:
 	var fighter := fighters[fighter_index]
 	if is_instance_valid(fighter) and not fighter.request_heavy_attack():
 		_show_battle_message("¡ESPERA A QUE EL SUPERPODER ESTÉ LISTO!" if game_mode == "kids" else "HERRAMIENTA NO DISPONIBLE O RECARGANDO", Color("c4cfdd"))
+
+func _request_tactical_action(fighter_index: int, action: String) -> void:
+	if fighter_index < 0 or fighter_index >= fighters.size():
+		return
+	var fighter: ArenaFighter = fighters[fighter_index]
+	if is_instance_valid(fighter) and not fighter.request_tactical_action(action):
+		_show_battle_message("ACCIÓN RECARGANDO", Color("c4cfdd"))
 
 func _update_heavy_buttons() -> void:
 	for button in heavy_buttons:
@@ -1383,6 +1437,21 @@ func _update_heavy_buttons() -> void:
 		else:
 			var action_name := fighter.manual_action_label()
 			button.text = "%s J%d%s" % [action_name, fighter_index + 1, " · %.1fs" % fighter.heavy_cooldown if fighter.heavy_cooldown > 0.05 else " · ¡LISTO!"]
+
+func _update_advanced_action_buttons() -> void:
+	for button in advanced_action_buttons:
+		var fighter_index := int(button.get_meta("fighter_index", -1))
+		if fighter_index < 0 or fighter_index >= fighters.size():
+			continue
+		var fighter: ArenaFighter = fighters[fighter_index]
+		var action: String = str(button.get_meta("action", ""))
+		var base_text: String = str(button.get_meta("base_text", "ACCIÓN"))
+		if not is_instance_valid(fighter):
+			button.disabled = true
+			continue
+		var cooldown: float = fighter.tactical_action_cooldown(action)
+		button.disabled = fighter.hp <= 0.0 or cooldown > 0.05
+		button.text = "%s\n%.1fs" % [base_text, cooldown] if cooldown > 0.05 else base_text + "\n¡LISTO!"
 
 func _countdown() -> void:
 	var pitch := 0.82
@@ -1699,10 +1768,10 @@ func _show_arcade_callout(message: String, color: Color, intensity: int) -> void
 	callout.anchor_top = 0.34
 	callout.anchor_right = 0.88
 	callout.anchor_bottom = 0.60
-	callout.add_theme_font_size_override("font_size", 56 + intensity * 10)
+	callout.add_theme_font_size_override("font_size", 22 + intensity * 4)
 	callout.add_theme_color_override("font_color", color)
 	callout.add_theme_color_override("font_outline_color", Color("e6000714"))
-	callout.add_theme_constant_override("outline_size", 10 + intensity * 2)
+	callout.add_theme_constant_override("outline_size", 5 + intensity)
 	callout.add_theme_color_override("font_shadow_color", color.darkened(0.60))
 	callout.add_theme_constant_override("shadow_offset_x", 8)
 	callout.add_theme_constant_override("shadow_offset_y", 10)
@@ -1736,9 +1805,9 @@ func _show_help() -> void:
 		"1  ELIGE Y CAMBIA PARTES\nToca directamente el robot: los controles son invisibles para que puedas verlo completo. También puedes usar las categorías del costado. En modo fácil hay cuatro opciones por zona.\n\n" +
 		"2  ELIGE SU CARA\nPrueba ocho expresiones divertidas. La cara elegida aparece en el taller y durante toda la pelea.\n\n" +
 		"3  CONOCE A TU RIVAL\nLos puntos muestran quién tiene más vida, fuerza y rapidez.\n\n" +
-		"4  ¡JUEGA!\nLos robots rodean, amagan, esquivan, cargan y se separan después de atacar. Los críticos pueden lanzar una pieza mecánica con muchas chispas. Toca SUPERPODER cuando diga LISTO. El aro luminoso muestra cuál es tu robot.\n\n" +
+		"4  ¡JUEGA!\nLos robots rodean, saltan, flanquean, amagan, esquivan, cargan y se separan después de atacar. Los críticos pueden lanzar una pieza mecánica con muchas chispas. Toca SUPERPODER cuando diga LISTO. El aro luminoso muestra cuál es tu robot.\n\n" +
 		"SI NO GANAS\nNo pasa nada. Toca AYÚDAME A ELEGIR y el juego recomendará el robot más conveniente.\n\n" +
-		"MÁS OPCIONES\nTaller avanzado permite construir pieza por pieza. También hay dos jugadores y modo Wi-Fi. Todos los modos usan la misma IA, críticos arcade y desarmes mecánicos.",
+		"MÁS OPCIONES\nTaller avanzado permite construir pieza por pieza y agrega botones para Saltar, Defensa e Impulso. También hay dos jugadores y modo Wi-Fi. Todos los modos usan la misma IA, críticos arcade y desarmes mecánicos.",
 		18,
 		INK
 	)
@@ -1805,6 +1874,7 @@ func _clear_ui() -> void:
 	fighter_hp_bars.clear()
 	fighter_hp_texts.clear()
 	heavy_buttons.clear()
+	advanced_action_buttons.clear()
 	robot_touch_buttons.clear()
 	lan_status_label = null
 	lan_start_button = null
@@ -2059,12 +2129,13 @@ func _run_smoke_test() -> void:
 	passed = passed and Catalog.affinity_multiplier("hydraulic", "thermal") > 1.0
 	var model_test := RobotModelScript.new()
 	add_child(model_test)
-	model_test.build_robot(maximum_build, BLUE)
+	model_test.build_robot(maximum_build, BLUE, "head")
 	passed = passed and model_test.part_roots.size() == 8
 	passed = passed and model_test.expression_id == 7 and model_test.get_node_or_null("head/ExpressionFace") != null
+	passed = passed and model_test.has_node("AssemblyHand")
 	model_test.set_damage_state(3)
 	passed = passed and model_test.has_node("MechanicalDamage")
-	passed = passed and audio.streams.has("battle_music") and audio.streams.has("critical") and audio.streams.size() >= 16
+	passed = passed and audio.streams.has("battle_music") and audio.streams.has("critical") and audio.streams.has("weld") and audio.streams.size() >= 17
 	var fighter_test_a := FighterScript.new()
 	var fighter_test_b := FighterScript.new()
 	add_child(fighter_test_a)
@@ -2081,6 +2152,7 @@ func _run_smoke_test() -> void:
 	fighter_test_a.begin_fight()
 	fighter_test_b.begin_fight()
 	passed = passed and fighter_test_a.request_heavy_attack()
+	passed = passed and fighter_test_a.request_tactical_action("jump") and fighter_test_a.jump_cooldown > 0.0
 	var hp_before: float = fighter_test_b.hp
 	fighter_test_b.take_damage(50.0, fighter_test_a.global_position, false)
 	passed = passed and fighter_test_b.hp < hp_before
@@ -2091,6 +2163,7 @@ func _run_smoke_test() -> void:
 	var preview_prediction := _kids_prediction_for(maximum_build, Catalog.empty_build())
 	passed = passed and float(preview_prediction.player) > 0.0 and float(preview_prediction.cpu) > 0.0
 	passed = passed and EXPRESSION_LABELS.size() == 8
+	passed = passed and FighterScript.CombatTactic.size() == 9
 	passed = passed and fighter_test_a._can_attack_at_distance(2.0)
-	print("FORJA_KIDS_SMOKE_TEST:", "PASS" if passed else "FAIL", " expressions=8 criticals=OK detachable_parts=OK combat_tactics=6 aura=OK LAN=4")
+	print("FORJA_KIDS_SMOKE_TEST:", "PASS" if passed else "FAIL", " square_thumbnails=OK assembly_hand=OK jumps=OK advanced_buttons=4 combat_tactics=9 criticals=OK LAN=4")
 	get_tree().quit(0 if passed else 1)

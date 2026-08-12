@@ -1,4 +1,4 @@
-# Forja Infinita: Robots Kids v1.8.0
+# Forja Infinita: Robots Kids v1.9.0
 
 Edición infantil independiente para Godot 4.4.1, Android ARM64 y PC. Usa un identificador Android diferente, por lo que puede instalarse junto a la edición normal.
 
@@ -21,6 +21,10 @@ El modo principal está diseñado en cuatro pasos grandes y claros:
 ## Diseño infantil
 
 - Robot todavía más grande durante la elección, completamente visible y sin paneles encima del modelo.
+- El robot permanece siempre a la izquierda y los dos talleres colocan toda la selección a la derecha.
+- Tarjetas cuadradas con miniaturas grandes de cada pieza: menos texto, cuatro opciones visibles en Kids y veinte en el avanzado.
+- Las categorías del taller avanzado también son botones cuadrados ilustrados con la pieza equipada.
+- El panel derecho puede desplazarse, por lo que las imágenes mantienen un tamaño cómodo sin tapar el robot.
 - Selección directa invisible: toca cabeza, torso, brazos, piernas o manos sobre el propio robot para abrir esa categoría sin taparlo.
 - Puedes volver a tocar cualquier zona y cambiarla todas las veces que quieras antes de comenzar.
 - El modo Kids ofrece solo cuatro piezas claras por zona; el Taller avanzado conserva las veinte.
@@ -36,10 +40,14 @@ El modo principal está diseñado en cuatro pasos grandes y claros:
 - IA de combate compartida por Kids y adulto con rodeos, fintas, retiradas, cargas, bloqueos y esquivas laterales.
 - Los robots se separan después de atacar y cambian de distancia en lugar de permanecer pegados frente a frente.
 - Ataques con giro de torso, tres variantes de movimiento, impulso y recuperación.
-- Los golpes críticos muestran anuncios arcade enormes, destello de pantalla, sonido especial y una sacudida más intensa.
+- Los robots ahora pueden saltar para entrar, esquivar o cambiar el ángulo de ataque.
+- IA ampliada de seis a nueve tácticas: salto ofensivo, flanqueo y contraataque se suman a rodeo, presión, retirada, finta, carga y defensa.
+- En historia avanzada la CPU decide y reacciona más rápido a medida que sube el nivel.
+- Los golpes críticos muestran anuncios arcade compactos, destello de pantalla, sonido especial y una sacudida más intensa.
 - En críticos y golpes de herramienta pueden desprenderse de forma mecánica cabezas, brazos o armas; vuelan con cables y chispas, sin efectos gráficos violentos.
 - Los desarmes cambian de verdad el combate: perder un brazo reduce fuerza y velocidad de ataque; perder la cabeza reduce puntería y energía.
 - Música original de combate industrial a 156 BPM, con percusión metálica, bajo y sintetizadores propios.
+- Al cambiar una pieza, una mano robótica la transporta, la instala y termina con destellos de soldadura y sonido mecánico.
 - Un aro de luz suave sigue al robot de cada jugador dentro del ring; los rivales controlados por la CPU no lo tienen.
 - Al terminar, el robot que pierde simplemente se toma un descanso.
 - Victoria entrega tres estrellas y cada intento entrega una estrella.
@@ -48,7 +56,7 @@ El modo principal está diseñado en cuatro pasos grandes y claros:
 
 ## Opciones adicionales
 
-La edición conserva el taller completo de 160 piezas, dos jugadores en un dispositivo y LAN de 2 a 4 teléfonos. Todos comparten la misma IA, los críticos arcade y los desprendimientos mecánicos.
+La edición conserva el taller completo de 160 piezas, dos jugadores en un dispositivo y LAN de 2 a 4 teléfonos. Todos comparten la misma IA, los críticos arcade y los desprendimientos mecánicos. El combate avanzado agrega botones de **Saltar**, **Defensa** e **Impulso** además del arma principal.
 
 ## Ejecutar en PC
 

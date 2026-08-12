@@ -21,7 +21,7 @@ const PART_LABELS := {
 }
 const PERSONALITY_NAMES := ["AGRESIVO", "TÁCTICO", "PESO PESADO", "ACROBÁTICO"]
 
-enum CombatTactic { CIRCLE, PRESS, RETREAT, FEINT, BURST, BRACE }
+enum CombatTactic { CIRCLE, PRESS, RETREAT, FEINT, BURST, BRACE, JUMP_ATTACK, FLANK, COUNTER }
 
 var fighter_id := 0
 var build := {}
@@ -66,6 +66,10 @@ var _combat_tactic: int = CombatTactic.CIRCLE
 var _tactic_timer := 0.0
 var _disengage_timer := 0.0
 var _burst_time := 0.0
+var ai_difficulty := 1.0
+var jump_cooldown := 0.0
+var guard_cooldown := 0.0
+var dash_cooldown := 0.0
 
 func setup_robot(new_build: Dictionary, tint: Color, stat_multiplier: float, new_id: int, robot_name: String) -> void:
 	fighter_id = new_id
@@ -139,6 +143,50 @@ func request_heavy_attack() -> bool:
 	combat_event.emit("¡%s CARGA SU SUPERPODER!" % display_name if friendly_mode else "%s PREPARA %s" % [display_name, _action_label_for_side(_manual_use_left)], team_color)
 	return true
 
+func request_tactical_action(action: String) -> bool:
+	if not active or hp <= 0.0 or not is_instance_valid(opponent):
+		return false
+	var difference: Vector3 = opponent.global_position - global_position
+	difference.y = 0.0
+	var forward: Vector3 = difference.normalized() if difference.length() > 0.05 else Vector3.FORWARD
+	var side: Vector3 = forward.cross(Vector3.UP) * _strafe_direction
+	match action:
+		"jump":
+			if jump_cooldown > 0.0:
+				return false
+			jump_cooldown = 3.8
+			model.play_jump(1.45)
+			_impulse_velocity += forward * 2.6 + side * 1.1
+			combat_event.emit("%s SALTA Y CAMBIA EL ÁNGULO" % display_name, team_color)
+		"guard":
+			if guard_cooldown > 0.0:
+				return false
+			guard_cooldown = 5.2
+			_brace_time = 1.35
+			_impulse_velocity *= 0.25
+			combat_event.emit("%s ACTIVA DEFENSA" % display_name, team_color)
+		"dash":
+			if dash_cooldown > 0.0:
+				return false
+			dash_cooldown = 4.4
+			_impulse_velocity += forward * 5.2 + side * 4.4
+			model.play_maneuver(_strafe_direction, 1.0)
+			_strafe_direction *= -1.0
+			combat_event.emit("%s HACE UN IMPULSO LATERAL" % display_name, team_color)
+		_:
+			return false
+	return true
+
+func tactical_action_cooldown(action: String) -> float:
+	match action:
+		"jump":
+			return jump_cooldown
+		"guard":
+			return guard_cooldown
+		"dash":
+			return dash_cooldown
+	return 0.0
+
 func has_manual_weapon() -> bool:
 	if not is_instance_valid(model):
 		return false
@@ -192,6 +240,9 @@ func begin_fight() -> void:
 	_brace_time = 0.0
 	_disengage_timer = 0.0
 	_burst_time = 0.0
+	jump_cooldown = 0.0
+	guard_cooldown = 0.0
+	dash_cooldown = 0.0
 	_tactic_timer = 0.15 + think_offset
 	model.set_moving(false)
 
@@ -208,6 +259,9 @@ func _physics_process(delta: float) -> void:
 		return
 	attack_cooldown = maxf(0.0, attack_cooldown - delta)
 	heavy_cooldown = maxf(0.0, heavy_cooldown - delta)
+	jump_cooldown = maxf(0.0, jump_cooldown - delta)
+	guard_cooldown = maxf(0.0, guard_cooldown - delta)
+	dash_cooldown = maxf(0.0, dash_cooldown - delta)
 	_auto_tool_timer = maxf(0.0, _auto_tool_timer - delta)
 	_personality_timer = maxf(0.0, _personality_timer - delta)
 	_stagger_time = maxf(0.0, _stagger_time - delta)
@@ -277,6 +331,12 @@ func _physics_process(delta: float) -> void:
 				move_direction = forward * feint_wave * 0.86 + side * 0.68
 			CombatTactic.BURST:
 				move_direction = forward * 1.48 + side * 0.16
+			CombatTactic.JUMP_ATTACK:
+				move_direction = forward * 1.18 + side * 0.74
+			CombatTactic.FLANK:
+				move_direction = side * 1.36 + forward * 0.34
+			CombatTactic.COUNTER:
+				move_direction = -forward * 0.46 + side * 0.44
 			_:
 				move_direction = side * 0.30
 	if _maneuver_timer <= 0.0 and distance < preferred_range * 1.35:
@@ -284,7 +344,7 @@ func _physics_process(delta: float) -> void:
 		_impulse_velocity += dodge_direction * _rng.randf_range(2.4, 4.0)
 		model.play_maneuver(_strafe_direction, -0.25)
 		_strafe_direction *= -1.0
-		_maneuver_timer = _rng.randf_range(0.95, 1.85)
+		_maneuver_timer = _rng.randf_range(0.95, 1.85) / clampf(ai_difficulty, 1.0, 1.6)
 	if _personality_timer <= 0.0 and distance < preferred_range * 1.65:
 		_perform_personality_action(difference)
 		_personality_timer = 1.65 + float((_personality_actions + fighter_id) % 4) * 0.34
@@ -307,17 +367,17 @@ func _physics_process(delta: float) -> void:
 func _choose_combat_tactic(difference: Vector3, distance: float) -> void:
 	if difference.length() < 0.05:
 		return
-	var roll: int = _rng.randi_range(0, 5)
+	var roll: int = _rng.randi_range(0, 8)
 	if personality_id == 0 and roll in [2, 5]:
 		roll = 1
-	elif personality_id == 1 and roll == 1:
-		roll = 3
-	elif personality_id == 2 and roll in [3, 4]:
-		roll = 5
-	elif personality_id == 3 and roll == 5:
-		roll = 0
+	elif personality_id == 1 and roll in [1, 6]:
+		roll = 7
+	elif personality_id == 2 and roll in [3, 4, 6]:
+		roll = 8
+	elif personality_id == 3 and roll in [5, 8]:
+		roll = 6
 	_combat_tactic = roll
-	_tactic_timer = _rng.randf_range(0.65, 1.35)
+	_tactic_timer = _rng.randf_range(0.58, 1.20) / clampf(ai_difficulty, 1.0, 1.6)
 	if _combat_tactic in [CombatTactic.CIRCLE, CombatTactic.FEINT]:
 		_strafe_direction *= -1.0 if _rng.randf() < 0.55 else 1.0
 	if _combat_tactic == CombatTactic.BURST:
@@ -329,6 +389,16 @@ func _choose_combat_tactic(difference: Vector3, distance: float) -> void:
 		model.play_maneuver(_strafe_direction, 0.25)
 	elif _combat_tactic == CombatTactic.BRACE and distance < _melee_contact_range() * 1.35:
 		_brace_time = maxf(_brace_time, 0.50)
+	elif _combat_tactic == CombatTactic.JUMP_ATTACK and jump_cooldown <= 0.0:
+		jump_cooldown = _rng.randf_range(2.6, 4.0)
+		model.play_jump(1.55 if personality_id == 3 else 1.20)
+		_impulse_velocity += difference.normalized() * 2.8
+	elif _combat_tactic == CombatTactic.FLANK:
+		_strafe_direction *= -1.0
+		model.play_maneuver(_strafe_direction, 0.45)
+	elif _combat_tactic == CombatTactic.COUNTER:
+		_brace_time = maxf(_brace_time, 0.78)
+		model.play_maneuver(_strafe_direction * 0.35, -0.55)
 
 func _can_attack_at_distance(distance: float) -> bool:
 	var ranged_ready: bool = float(stats.range) >= 4.35 and (_side_available(true) or _side_available(false))
@@ -403,7 +473,7 @@ func _perform_attack(distance: float) -> void:
 		combat_event.emit("¡CASI, %s!" % display_name if friendly_mode else "%s FALLA EL ATAQUE" % display_name, Color("d7e1ef"))
 		model.play_attack(use_left, false)
 		_disengage_timer = 0.34
-		attack_cooldown = maxf(0.42, 1.46 / float(stats.attack_speed))
+		attack_cooldown = maxf(0.34, 1.46 / (float(stats.attack_speed) * clampf(ai_difficulty, 1.0, 1.35)))
 		return
 	var attack_affinity := Catalog.weapon_affinity(build, use_left) if has_weapon else Catalog.dominant_affinity(build)
 	var defend_affinity := Catalog.dominant_affinity(opponent.build)
@@ -431,7 +501,7 @@ func _perform_attack(distance: float) -> void:
 		var combo_ready := attack_count % 5 == 0 and not special and has_arm
 		var weapon_index: int = int(build.get("left_weapon" if use_left else "right_weapon", 0))
 		get_tree().create_timer(contact_delay).timeout.connect(_resolve_melee_hit.bind(opponent, damage, special, use_left, combo_ready, critical, weapon_index))
-	attack_cooldown = maxf(0.42, 1.46 / float(stats.attack_speed))
+	attack_cooldown = maxf(0.34, 1.46 / (float(stats.attack_speed) * clampf(ai_difficulty, 1.0, 1.35)))
 	if special:
 		attack_cooldown += 0.28
 

@@ -37,6 +37,9 @@ var expression_id := 0
 var _face_root: Node3D
 var _face_pulse := 0.0
 var _attack_variant := 0
+var _jump_time := 0.0
+var _jump_duration := 0.72
+var _jump_height := 0.0
 
 func build_robot(build: Dictionary, tint: Color, animate_slot: String = "") -> void:
 	team_tint = tint
@@ -47,6 +50,8 @@ func build_robot(build: Dictionary, tint: Color, animate_slot: String = "") -> v
 	_damage_layer = null
 	_face_root = null
 	_face_pulse = 0.0
+	_jump_time = 0.0
+	_jump_height = 0.0
 	_fault_timer = 0.0
 	for child in get_children():
 		remove_child(child)
@@ -168,6 +173,14 @@ func play_hit(strong := false) -> void:
 	tween.tween_property(self, "scale", Vector3.ONE, 0.21 if strong else 0.16)
 	tween.parallel().tween_property(self, "rotation", original_rotation, 0.21 if strong else 0.16)
 
+func play_jump(height: float = 1.15) -> void:
+	if defeated or celebrating or _jump_time > 0.0:
+		return
+	_jump_height = clampf(height, 0.65, 1.85)
+	_jump_duration = 0.76 if _jump_height > 1.2 else 0.64
+	_jump_time = _jump_duration
+	_face_pulse = 0.72
+
 func set_damage_state(level: int) -> void:
 	var safe_level := clampi(level, 0, 3)
 	if safe_level <= _damage_level:
@@ -228,6 +241,7 @@ func _process(delta: float) -> void:
 	if defeated or celebrating:
 		return
 	_attack_time = maxf(0.0, _attack_time - delta)
+	_jump_time = maxf(0.0, _jump_time - delta)
 	_fault_timer = maxf(0.0, _fault_timer - delta)
 	_face_pulse = maxf(0.0, _face_pulse - delta * 3.2)
 	var gait := sin(_time * 6.8)
@@ -315,7 +329,10 @@ func _process(delta: float) -> void:
 	var target_y := _base_y + sin(_time * 2.1) * 0.018
 	if moving:
 		target_y += abs(gait) * 0.10
-	position.y = lerpf(position.y, target_y, minf(1.0, delta * 12.0))
+	if _jump_time > 0.0:
+		var jump_progress: float = 1.0 - _jump_time / _jump_duration
+		target_y += sin(jump_progress * PI) * _jump_height
+	position.y = lerpf(position.y, target_y, minf(1.0, delta * (22.0 if _jump_time > 0.0 else 12.0)))
 	position.z = lerpf(position.z, _base_z + attack_lunge, minf(1.0, delta * 18.0))
 
 func remember_floor_height() -> void:
@@ -798,10 +815,53 @@ func _add_mesh(parent: Node3D, mesh: PrimitiveMesh, color: Color, glow: bool, of
 
 func _animate_join(root: Node3D, order: int) -> void:
 	var destination := root.position
-	var angle := float(order) * 0.91
-	root.position = destination + Vector3(cos(angle) * 5.4, 2.0 + order * 0.12, sin(angle) * 3.8)
+	var target := _assembly_target(order)
+	var start := Vector3(5.8, 6.1, 1.3)
+	root.position = destination + Vector3(4.2, 2.6, 1.0)
 	root.scale = Vector3.ONE * 0.14
+	var assembly_hand := Node3D.new()
+	assembly_hand.name = "AssemblyHand"
+	assembly_hand.position = start
+	add_child(assembly_hand)
+	_add_shape(assembly_hand, 2, Vector3(0.58, 0.58, 0.58), Color("ffb54f"), true)
+	_add_shape(assembly_hand, 0, Vector3(0.22, 1.65, 0.22), Color("52688f"), false, Vector3(0.0, 0.82, 0.0), Vector3(0.0, 0.0, -24.0))
+	_add_shape(assembly_hand, 0, Vector3(0.20, 1.30, 0.20), Color("7d93bc"), false, Vector3(-0.52, -0.48, 0.0), Vector3(0.0, 0.0, 48.0))
+	for claw_side in [-1.0, 1.0]:
+		_add_shape(assembly_hand, 0, Vector3(0.12, 0.62, 0.14), Color("ffe36e"), true, Vector3(claw_side * 0.27, -0.54, 0.0), Vector3(0.0, 0.0, claw_side * 24.0))
 	var tween := create_tween()
-	tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	tween.tween_property(root, "position", destination, 0.40)
-	tween.parallel().tween_property(root, "scale", Vector3.ONE, 0.40)
+	tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.tween_property(assembly_hand, "position", target + Vector3(0.0, 0.58, 0.34), 0.42)
+	tween.parallel().tween_property(root, "position", destination, 0.42)
+	tween.parallel().tween_property(root, "scale", Vector3.ONE, 0.42)
+	tween.tween_callback(_spawn_weld_sparks.bind(target))
+	tween.tween_interval(0.28)
+	tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_IN)
+	tween.tween_property(assembly_hand, "position", start, 0.38)
+	tween.tween_callback(assembly_hand.queue_free)
+
+func _assembly_target(order: int) -> Vector3:
+	var targets := [
+		Vector3(0.0, 4.18, 0.45),
+		Vector3(0.0, 2.76, 0.55),
+		Vector3(-1.28, 3.30, 0.30),
+		Vector3(1.28, 3.30, 0.30),
+		Vector3(-0.60, 1.52, 0.24),
+		Vector3(0.60, 1.52, 0.24),
+		Vector3(-1.72, 1.52, 0.42),
+		Vector3(1.72, 1.52, 0.42),
+	]
+	return targets[clampi(order, 0, targets.size() - 1)]
+
+func _spawn_weld_sparks(target: Vector3) -> void:
+	for index in range(18):
+		var spark := Node3D.new()
+		spark.position = target
+		add_child(spark)
+		_add_shape(spark, 2, Vector3(0.055, 0.055, 0.055), Color("fff173") if index % 3 else Color("67dfff"), true)
+		var angle: float = TAU * float(index) / 18.0
+		var destination := target + Vector3(cos(angle) * 0.72, sin(angle * 2.0) * 0.42, sin(angle) * 0.72)
+		var spark_tween := spark.create_tween()
+		spark_tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+		spark_tween.tween_property(spark, "position", destination, 0.20)
+		spark_tween.parallel().tween_property(spark, "scale", Vector3.ZERO, 0.24)
+		spark_tween.tween_callback(spark.queue_free)
