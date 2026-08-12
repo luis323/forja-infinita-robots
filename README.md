@@ -1,4 +1,13 @@
-# Forja Infinita: Robots Kids v1.9.0
+# Forja Infinita: Robots Kids v2.0.0
+
+## Nuevo hangar táctico
+
+- Menú de selección reorganizado como laboratorio de mecas: diagnóstico a la izquierda, robot grande al centro y banco de piezas a la derecha.
+- Tarjetas cuadradas de 132 × 132 con ilustraciones técnicas grandes, retícula y estados bloqueados muy visibles.
+- Clasificación automática del robot en Explorador, Vanguardia, Asalto o Coloso según su peso final.
+- Panel independiente para diez estadísticas, afinidad, potencia, créditos, sinergia y armas equipadas.
+- Piezas avanzadas rediseñadas con cabinas, sensores, hombreras, blindaje modular, pistones y puntos de montaje.
+- Estética inspirada en hangares de robots militares modernos, usando diseños y nombres originales de Forja Infinita.
 
 Edición infantil independiente para Godot 4.4.1, Android ARM64 y PC. Usa un identificador Android diferente, por lo que puede instalarse junto a la edición normal.
 

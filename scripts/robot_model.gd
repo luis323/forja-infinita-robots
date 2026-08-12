@@ -412,6 +412,12 @@ func _build_torso(root: Node3D, index: int, metal: Color, accent: Color) -> void
 		19:
 			for x in [-0.72, 0.72]:
 				_add_shape(root, 0, Vector3(0.28, 0.70, 0.18), accent, true, Vector3(x, 0.10, size.z * 0.72))
+	if index >= 12:
+		for side in [-1.0, 1.0]:
+			_add_shape(root, 0, Vector3(0.48, 0.38, 0.82), metal.darkened(0.20), false, Vector3(side * (size.x * 0.58), size.y * 0.34, -0.05), Vector3(0.0, 0.0, side * 9.0))
+			_add_shape(root, 2, Vector3(0.13, 0.13, 0.12), accent, true, Vector3(side * (size.x * 0.58), size.y * 0.35, 0.39))
+		for vent_x in [-0.34, 0.0, 0.34]:
+			_add_shape(root, 0, Vector3(0.18, 0.07, 0.10), Color("75cfe2"), true, Vector3(vent_x, -size.y * 0.30, size.z * 0.57))
 
 func _build_head(root: Node3D, index: int, metal: Color, accent: Color) -> void:
 	root.position = Vector3(0.0, 4.18, 0.0)
@@ -603,6 +609,9 @@ func _build_arm(root: Node3D, slot: String, index: int, metal: Color, accent: Co
 		19:
 			for y in [-0.18, -0.48, -0.78]:
 				_add_shape(elbow, 0, Vector3(width * 1.38, 0.08, width * 1.38), accent, true, Vector3(0.0, y * lower_length, 0.0), Vector3(0.0, float(y) * 80.0, 0.0))
+	if index >= 12:
+		_add_shape(upper, 0, Vector3(width * 1.75, upper_length * 0.30, width * 1.42), metal.darkened(0.20), false, Vector3(side * width * 0.30, -upper_length * 0.22, 0.0), Vector3(0.0, 0.0, side * 7.0))
+		_add_shape(elbow, 0, Vector3(width * 1.34, lower_length * 0.22, width * 1.30), accent.darkened(0.20), false, Vector3(0.0, -lower_length * 0.28, 0.0))
 
 func _build_leg(root: Node3D, slot: String, index: int, metal: Color, accent: Color) -> void:
 	var side := -1.0 if slot == "left_leg" else 1.0
@@ -657,6 +666,10 @@ func _build_leg(root: Node3D, slot: String, index: int, metal: Color, accent: Co
 		19:
 			for y in [-0.22, -0.52, -0.82]:
 				_add_shape(knee, 0, Vector3(width * 1.36, 0.07, width * 1.36), accent, true, Vector3(0.0, y * lower_length, 0.0))
+	if index >= 12:
+		_add_shape(knee, 0, Vector3(width * 1.62, width * 0.62, width * 1.42), metal.darkened(0.22), false, Vector3(0.0, 0.02, width * 0.36))
+		for piston_side in [-1.0, 1.0]:
+			_add_shape(knee, 1, Vector3(width * 0.18, lower_length * 0.55, width * 0.18), accent, true, Vector3(piston_side * width * 0.56, -lower_length * 0.42, -width * 0.24))
 
 func _build_weapon(root: Node3D, index: int, metal: Color, accent: Color, side: float) -> void:
 	root.position = Vector3(0.0, -0.22, 0.10)

@@ -87,6 +87,8 @@ var ui_root: Control
 var timer_label: Label
 var stats_label: Label
 var synergy_label: Label
+var hangar_class_label: Label
+var hangar_loadout_label: Label
 var option_detail_label: Label
 var options_grid: GridContainer
 var slot_buttons := {}
@@ -338,8 +340,9 @@ func _show_kids_builder(animate_slot: String = "") -> void:
 	camera.position = Vector3(0.15, 5.0, 11.8)
 	camera.fov = 46.0
 	camera.look_at(Vector3(-1.45, 2.62, 0.0), Vector3.UP)
+	_add_hangar_viewport_frame(0.012, true)
 
-	var banner := _title_label("1 · TOCA UNA PARTE DEL ROBOT", 29, GOLD)
+	var banner := _title_label("HANGAR FÁCIL  //  TOCA UNA PARTE DEL ROBOT", 27, GOLD)
 	banner.anchor_left = 0.015
 	banner.anchor_top = 0.02
 	banner.anchor_right = 0.57
@@ -347,11 +350,11 @@ func _show_kids_builder(animate_slot: String = "") -> void:
 	ui_root.add_child(banner)
 
 	var panel := PanelContainer.new()
-	panel.anchor_left = 0.605
+	panel.anchor_left = 0.645
 	panel.anchor_top = 0.035
 	panel.anchor_right = 0.985
 	panel.anchor_bottom = 0.975
-	panel.add_theme_stylebox_override("panel", _panel_style(Color("e51c3157"), 26))
+	panel.add_theme_stylebox_override("panel", _hangar_panel_style(Color("ed1c3157"), Color("7ce9ff")))
 	ui_root.add_child(panel)
 	var scroll := ScrollContainer.new()
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -372,7 +375,8 @@ func _show_kids_builder(animate_slot: String = "") -> void:
 	box.add_child(tip)
 	var stats := Catalog.normalized_stats(current_build)
 	var simple_stats := _label(
-		"VIDA %s   RAPIDEZ %s\nFUERZA %s   DEFENSA %s" % [
+		"TIPO %s\nVIDA %s   RAPIDEZ %s\nFUERZA %s   DEFENSA %s" % [
+			Catalog.chassis_class(current_build),
 			_kids_meter(float(stats.health)),
 			_kids_meter(float(stats.speed)),
 			_kids_meter(float(stats.power)),
@@ -485,11 +489,12 @@ func _start_builder() -> void:
 	_clear_ui()
 	var tint: Color = TEAM_COLORS[clampi(current_builder - 1, 0, 3)]
 	_show_workshop_preview(current_build, Vector3(-1.35, 0.0, 0.0), tint)
-	preview_robot.scale = Vector3.ONE * 1.52
+	preview_robot.scale = Vector3.ONE * 1.62
 	preview_robot.remember_floor_height()
 	camera.position = Vector3(0.10, 4.90, 11.45)
 	camera.fov = 45.0
 	camera.look_at(Vector3(-1.25, 2.72, 0.0), Vector3.UP)
+	_add_hangar_viewport_frame(0.205, false)
 	_build_builder_ui()
 	_refresh_options()
 	_update_build_info()
@@ -497,11 +502,11 @@ func _start_builder() -> void:
 func _build_builder_ui() -> void:
 	var top := PanelContainer.new()
 	top.set_anchors_preset(Control.PRESET_TOP_WIDE)
-	top.offset_left = 18.0
-	top.offset_top = 12.0
-	top.offset_right = -18.0
+	top.offset_left = 12.0
+	top.offset_top = 10.0
+	top.offset_right = -12.0
 	top.offset_bottom = 92.0
-	top.add_theme_stylebox_override("panel", _panel_style(PANEL_LIGHT, 18))
+	top.add_theme_stylebox_override("panel", _hangar_panel_style(Color("ef111a2b"), BLUE))
 	ui_root.add_child(top)
 	var top_row := HBoxContainer.new()
 	top_row.add_theme_constant_override("separation", 18)
@@ -511,99 +516,132 @@ func _build_builder_ui() -> void:
 		player_text = "TU ROBOT · RIVAL NIVEL %d" % cpu_level
 	elif game_mode == "lan":
 		player_text = "TU ROBOT LAN · TODO DESBLOQUEADO"
-	var player_label := _label(player_text, 25, TEAM_COLORS[clampi(current_builder - 1, 0, 3)])
+	var player_label := _label("LABORATORIO DE ENSAMBLAJE  //  " + player_text, 22, TEAM_COLORS[clampi(current_builder - 1, 0, 3)])
 	player_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top_row.add_child(player_label)
-	timer_label = _label("", 30, GOLD)
+	timer_label = _label("", 25, GOLD)
 	timer_label.custom_minimum_size = Vector2(200, 0)
 	timer_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	top_row.add_child(timer_label)
 	top_row.add_child(_make_button("SALIR", _show_main_menu, Color("60759a"), Vector2(110, 52)))
 
+	var stats_panel := PanelContainer.new()
+	stats_panel.anchor_left = 0.012
+	stats_panel.anchor_top = 0.14
+	stats_panel.anchor_right = 0.198
+	stats_panel.anchor_bottom = 0.985
+	stats_panel.add_theme_stylebox_override("panel", _hangar_panel_style(Color("ec091629"), Color("4fe0ff")))
+	ui_root.add_child(stats_panel)
+	var diagnostics := VBoxContainer.new()
+	diagnostics.add_theme_constant_override("separation", 5)
+	stats_panel.add_child(diagnostics)
+	var diagnostics_title := _label("DIAGNÓSTICO DE CHASIS", 16, BLUE)
+	diagnostics_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	diagnostics.add_child(diagnostics_title)
+	hangar_class_label = _label("CLASE // VANGUARDIA", 17, GOLD)
+	hangar_class_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	diagnostics.add_child(hangar_class_label)
+	stats_label = _label("", 12, INK)
+	stats_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	stats_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	diagnostics.add_child(stats_label)
+	diagnostics.add_child(_separator())
+	var stat_grid := GridContainer.new()
+	stat_grid.columns = 1
+	stat_grid.add_theme_constant_override("v_separation", 3)
+	stat_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	diagnostics.add_child(stat_grid)
+	stats_bars.clear()
+	stat_value_labels.clear()
+	for key in Catalog.STAT_KEYS:
+		var row := HBoxContainer.new()
+		row.custom_minimum_size = Vector2(0.0, 23.0)
+		row.add_theme_constant_override("separation", 4)
+		stat_grid.add_child(row)
+		var name_label := _label(Catalog.STAT_LABELS[key], 9, Color("bcd0e8"))
+		name_label.custom_minimum_size.x = 72.0
+		row.add_child(name_label)
+		var bar := _stat_bar(Catalog.AFFINITY_COLORS[Catalog.AFFINITIES[Catalog.STAT_KEYS.find(key) % 5]])
+		bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		bar.custom_minimum_size.y = 11.0
+		row.add_child(bar)
+		var value_label := _label("0", 9, INK)
+		value_label.custom_minimum_size.x = 32.0
+		value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+		row.add_child(value_label)
+		stats_bars[key] = bar
+		stat_value_labels[key] = value_label
+	diagnostics.add_child(_separator())
+	var hardpoint_title := _label("PUNTOS DE MONTAJE", 12, Color("77e8ff"))
+	hardpoint_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	diagnostics.add_child(hardpoint_title)
+	hangar_loadout_label = _label("", 10, Color("d9ecff"))
+	hangar_loadout_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	hangar_loadout_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	diagnostics.add_child(hangar_loadout_label)
+	synergy_label = _label("", 10, GOLD)
+	synergy_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	synergy_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	diagnostics.add_child(synergy_label)
+
 	var right_panel := PanelContainer.new()
-	right_panel.anchor_left = 0.605
-	right_panel.anchor_top = 0.145
-	right_panel.anchor_right = 0.99
+	right_panel.anchor_left = 0.65
+	right_panel.anchor_top = 0.14
+	right_panel.anchor_right = 0.992
 	right_panel.anchor_bottom = 0.985
-	right_panel.add_theme_stylebox_override("panel", _panel_style(PANEL, 20))
+	right_panel.add_theme_stylebox_override("panel", _hangar_panel_style(Color("f00b1428"), Color("72dfe9")))
 	ui_root.add_child(right_panel)
-	var scroll := ScrollContainer.new()
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	right_panel.add_child(scroll)
-	var outer := VBoxContainer.new()
-	outer.add_theme_constant_override("separation", 9)
-	outer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.add_child(outer)
-	var section_title := _label("TOCA EL ROBOT O ELIGE UNA PARTE", 20, GOLD)
+	var right_box := VBoxContainer.new()
+	right_box.add_theme_constant_override("separation", 6)
+	right_panel.add_child(right_box)
+	var section_title := _label("MÓDULOS // %s" % str(Catalog.LABELS[selected_slot]), 19, GOLD)
 	section_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	outer.add_child(section_title)
-	var scroll_hint := _label("DESLIZA EL PANEL PARA VER TODAS LAS OPCIONES", 9, Color("a9c8e8"))
+	right_box.add_child(section_title)
+	var scroll_hint := _label("ELIGE UNA ZONA · DESPUÉS TOCA UNA PIEZA", 9, Color("a9c8e8"))
 	scroll_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	outer.add_child(scroll_hint)
+	right_box.add_child(scroll_hint)
 	var slots := GridContainer.new()
 	slots.columns = 4
 	slots.add_theme_constant_override("h_separation", 5)
 	slots.add_theme_constant_override("v_separation", 5)
 	slots.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	outer.add_child(slots)
+	right_box.add_child(slots)
 	slot_buttons.clear()
 	for slot in Catalog.SLOTS:
 		var slot_index: int = int(current_build.get(slot, 0))
-		var button := _make_button("", _select_slot.bind(slot), GOLD if slot == selected_slot else Color("4b638d"), Vector2(100, 100))
+		var button := _make_button("", _select_slot.bind(slot), GOLD if slot == selected_slot else Color("405b75"), Vector2(104, 104))
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.tooltip_text = str(Catalog.LABELS[slot])
 		_decorate_part_tile(button, slot, slot_index, str(Catalog.LABELS[slot]), slot == selected_slot, false, false)
 		slots.add_child(button)
 		slot_buttons[slot] = button
-	_add_expression_selector(outer, false)
-	options_grid = GridContainer.new()
-	options_grid.columns = 4
-	options_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	options_grid.custom_minimum_size.y = 560.0
-	options_grid.add_theme_constant_override("h_separation", 5)
-	options_grid.add_theme_constant_override("v_separation", 5)
-	outer.add_child(options_grid)
-	option_detail_label = _label("", 15, Color("c5d6ee"))
+	option_detail_label = _label("", 13, Color("c5d6ee"))
 	option_detail_label.custom_minimum_size.y = 42
 	option_detail_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	outer.add_child(option_detail_label)
-	stats_label = _label("", 12, INK)
-	stats_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	stats_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	outer.add_child(stats_label)
-	var stat_grid := GridContainer.new()
-	stat_grid.columns = 2
-	stat_grid.add_theme_constant_override("h_separation", 8)
-	stat_grid.add_theme_constant_override("v_separation", 2)
-	outer.add_child(stat_grid)
-	stats_bars.clear()
-	stat_value_labels.clear()
-	for key in Catalog.STAT_KEYS:
-		var row := HBoxContainer.new()
-		row.custom_minimum_size = Vector2(205.0, 18.0)
-		row.add_theme_constant_override("separation", 3)
-		stat_grid.add_child(row)
-		var name_label := _label(Catalog.STAT_LABELS[key], 9, Color("bcd0e8"))
-		name_label.custom_minimum_size.x = 56.0
-		row.add_child(name_label)
-		var bar := _stat_bar(Catalog.AFFINITY_COLORS[Catalog.AFFINITIES[Catalog.STAT_KEYS.find(key) % 5]])
-		bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		bar.custom_minimum_size.y = 10.0
-		row.add_child(bar)
-		var value_label := _label("0", 9, INK)
-		value_label.custom_minimum_size.x = 28.0
-		value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-		row.add_child(value_label)
-		stats_bars[key] = bar
-		stat_value_labels[key] = value_label
-	synergy_label = _label("", 11, GOLD)
-	synergy_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	synergy_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	outer.add_child(synergy_label)
-	outer.add_child(_make_button("✓  TERMINAR Y ACTIVAR ROBOT", _finish_robot, GOLD, Vector2(0, 52)))
+	option_detail_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	right_box.add_child(option_detail_label)
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+	scroll.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	right_box.add_child(scroll)
+	var outer := VBoxContainer.new()
+	outer.add_theme_constant_override("separation", 7)
+	outer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(outer)
+	_add_expression_selector(outer, false)
+	var bank_title := _label("BANCO DE PIEZAS // 20 DISEÑOS", 12, Color("77e8ff"))
+	bank_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	outer.add_child(bank_title)
+	options_grid = GridContainer.new()
+	options_grid.columns = 3
+	options_grid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	options_grid.custom_minimum_size.y = 1040.0
+	options_grid.add_theme_constant_override("h_separation", 7)
+	options_grid.add_theme_constant_override("v_separation", 7)
+	outer.add_child(options_grid)
+	right_box.add_child(_make_button("✓  ACTIVAR ROBOT", _finish_robot, GOLD, Vector2(0, 52)))
 	_add_robot_touch_selectors(false)
 	_add_random_button(false)
 
@@ -707,13 +745,13 @@ func _update_robot_touch_targets() -> void:
 		elif slot.begins_with("right"):
 			side_offset.x = 20.0
 		var desired: Vector2 = screen_position - button.size * 0.5 + side_offset
-		desired.x = clampf(desired.x, 8.0, viewport_size.x * 0.595 - button.size.x)
+		desired.x = clampf(desired.x, 8.0, viewport_size.x * 0.635 - button.size.x)
 		desired.y = clampf(desired.y, 108.0, viewport_size.y - button.size.y - 12.0)
 		button.position = desired
 	if is_instance_valid(random_button):
 		var head_screen: Vector2 = camera.unproject_position(preview_robot.get_part_world_position("head"))
 		var random_position: Vector2 = head_screen - Vector2(random_button.size.x * 0.5, random_button.size.y + 78.0)
-		random_position.x = clampf(random_position.x, 12.0, viewport_size.x * 0.595 - random_button.size.x)
+		random_position.x = clampf(random_position.x, 12.0, viewport_size.x * 0.635 - random_button.size.x)
 		random_position.y = clampf(random_position.y, 96.0, viewport_size.y * 0.28)
 		random_button.position = random_position
 
@@ -758,7 +796,7 @@ func _refresh_options() -> void:
 		elif just_unlocked:
 			button_text = "✨ " + str(names[index])
 		var button_color := Color("852d45") if locked else (GOLD if index == chosen else Color("52688f"))
-		var button := _make_button("", _select_option.bind(index), button_color, Vector2(104, 104))
+		var button := _make_button("", _select_option.bind(index), button_color, Vector2(132, 132))
 		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		button.tooltip_text = "%s · BLOQUEADA · TOCA PARA COMPRAR" % names[index] if locked else str(names[index])
 		if locked:
@@ -783,11 +821,11 @@ func _decorate_part_tile(button: Button, slot: String, index: int, caption: Stri
 	thumbnail.anchor_left = 0.08
 	thumbnail.anchor_top = 0.05
 	thumbnail.anchor_right = 0.92
-	thumbnail.anchor_bottom = 0.73
+	thumbnail.anchor_bottom = 0.76
 	thumbnail.setup(slot, index, selected, locked)
-	var caption_label := _label(caption, 12 if kids_mode else 9, Color("fff8d1") if selected else Color("eef6ff"))
+	var caption_label := _label(caption, 12 if kids_mode else 10, Color("fff8d1") if selected else Color("eef6ff"))
 	caption_label.anchor_left = 0.05
-	caption_label.anchor_top = 0.73
+	caption_label.anchor_top = 0.76
 	caption_label.anchor_right = 0.95
 	caption_label.anchor_bottom = 0.98
 	caption_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -833,6 +871,11 @@ func _update_build_info() -> void:
 	var affinity := Catalog.dominant_affinity(current_build)
 	stats_label.text = "%s  ·  PODER %.0f%s" % [Catalog.AFFINITY_NAMES[affinity], Catalog.combat_rating(current_build), "  ·  %d C" % credits if game_mode == "story" else ""]
 	stats_label.add_theme_color_override("font_color", Catalog.AFFINITY_COLORS[affinity])
+	if is_instance_valid(hangar_class_label):
+		hangar_class_label.text = "CLASE // %s" % Catalog.chassis_class(current_build)
+		hangar_class_label.add_theme_color_override("font_color", Catalog.AFFINITY_COLORS[affinity])
+	if is_instance_valid(hangar_loadout_label):
+		hangar_loadout_label.text = Catalog.loadout_summary(current_build)
 	for key in Catalog.STAT_KEYS:
 		var bar: ProgressBar = stats_bars[key]
 		bar.value = float(normalized[key])
@@ -1861,6 +1904,8 @@ func _clear_ui() -> void:
 	timer_label = null
 	stats_label = null
 	synergy_label = null
+	hangar_class_label = null
+	hangar_loadout_label = null
 	option_detail_label = null
 	options_grid = null
 	hp_bar_a = null
@@ -1962,6 +2007,41 @@ func _center_panel(minimum: Vector2) -> PanelContainer:
 	panel.add_theme_stylebox_override("panel", _panel_style(PANEL, 24))
 	center.add_child(panel)
 	return panel
+
+func _add_hangar_viewport_frame(left_edge: float, kids_mode: bool) -> void:
+	var frame := PanelContainer.new()
+	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	frame.anchor_left = left_edge
+	frame.anchor_top = 0.115 if kids_mode else 0.14
+	frame.anchor_right = 0.635
+	frame.anchor_bottom = 0.985
+	frame.add_theme_stylebox_override("panel", _hangar_panel_style(Color("26071320"), Color("477f9c")))
+	ui_root.add_child(frame)
+	var telemetry := VBoxContainer.new()
+	telemetry.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	telemetry.alignment = BoxContainer.ALIGNMENT_END
+	frame.add_child(telemetry)
+	var line := _label("VISTA DE ENSAMBLAJE  //  GIROSCOPIO ESTABLE  //  ENLACE ACTIVO", 9, Color("82c9d8"))
+	line.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	line.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	telemetry.add_child(line)
+
+func _hangar_panel_style(background: Color, border: Color) -> StyleBoxFlat:
+	var style := StyleBoxFlat.new()
+	style.bg_color = background
+	style.border_color = border
+	style.set_border_width_all(2)
+	style.corner_radius_top_left = 3
+	style.corner_radius_top_right = 14
+	style.corner_radius_bottom_left = 14
+	style.corner_radius_bottom_right = 3
+	style.content_margin_left = 12.0
+	style.content_margin_right = 12.0
+	style.content_margin_top = 10.0
+	style.content_margin_bottom = 10.0
+	style.shadow_color = Color("88000000")
+	style.shadow_size = 7
+	return style
 
 func _panel_style(color: Color, radius: int) -> StyleBoxFlat:
 	var style := StyleBoxFlat.new()
@@ -2127,6 +2207,8 @@ func _run_smoke_test() -> void:
 	passed = passed and float(stats.health) > 0.0 and float(stats.power) > 0.0
 	passed = passed and Catalog.combat_rating(maximum_build) > 0.0
 	passed = passed and Catalog.affinity_multiplier("hydraulic", "thermal") > 1.0
+	passed = passed and Catalog.chassis_class(maximum_build) in ["EXPLORADOR", "VANGUARDIA", "ASALTO", "COLOSO"]
+	passed = passed and Catalog.loadout_summary(maximum_build).contains("I ·")
 	var model_test := RobotModelScript.new()
 	add_child(model_test)
 	model_test.build_robot(maximum_build, BLUE, "head")
@@ -2165,5 +2247,5 @@ func _run_smoke_test() -> void:
 	passed = passed and EXPRESSION_LABELS.size() == 8
 	passed = passed and FighterScript.CombatTactic.size() == 9
 	passed = passed and fighter_test_a._can_attack_at_distance(2.0)
-	print("FORJA_KIDS_SMOKE_TEST:", "PASS" if passed else "FAIL", " square_thumbnails=OK assembly_hand=OK jumps=OK advanced_buttons=4 combat_tactics=9 criticals=OK LAN=4")
+	print("FORJA_KIDS_SMOKE_TEST:", "PASS" if passed else "FAIL", " hangar_ui=OK mech_classes=4 square_thumbnails=OK assembly_hand=OK jumps=OK advanced_buttons=4 combat_tactics=9 LAN=4")
 	get_tree().quit(0 if passed else 1)

@@ -26,36 +26,36 @@ const LABELS := {
 const HEAD_NAMES := [
 	"Visor Aurora", "Cráneo Prisma", "Domo Cíclope", "Yelmo Cometa", "Cubo-8",
 	"Radar Mariposa", "Faros Gemelos", "Máscara Voltio", "Nodo Oráculo", "Meteorito",
-	"Cabeza Taladro", "Antena Coral", "Mandíbula Titanio", "Prisma Holográfico", "Ojo Panorámico",
-	"Casco Aleta", "Cúpula Solar", "Casco Relámpago", "Faro Abisal", "Corona Vector",
+	"Cabeza Taladro", "Antena Coral", "Visor de Asedio", "Cabina Holográfica", "Sensor Panorámico",
+	"Casco Vanguardia", "Cúpula Centinela", "Radar Tormenta", "Cabina Abisal", "Corona de Mando",
 ]
 
 const TORSO_NAMES := [
 	"Núcleo Colmena", "Reactor Solar", "Pecho Fortaleza", "Chasis Avispa", "Cámara Glacial",
 	"Reactor Cobalto", "Caparazón Tortuga", "Bastidor Acróbata", "Motor Vórtice", "Placa Meteoro",
-	"Cofre Magnético", "Chasis Submarino", "Armadura Salvavidas", "Núcleo de Plasma", "Bastidor Nube",
-	"Torso Locomotora", "Reactor Musgo", "Pecho Prisma", "Chasis Draco", "Núcleo Infinito",
+	"Cofre Magnético", "Chasis Submarino", "Bastión de Rescate", "Reactor de Asedio", "Bastidor Ala Alta",
+	"Coraza Locomotora", "Armadura Foresta", "Bastidor Prisma", "Coraza Dragón", "Núcleo de Mando",
 ]
 
 const ARM_NAMES := [
 	"Pinza Hidráulica", "Antebrazo Turbo", "Brazo Resorte", "Escudo Integrado", "Pistón Pesado",
 	"Brazo Telescópico", "Guante Magnético", "Módulo Arácnido", "Ala Articulada", "Brazo Taladro",
-	"Bíceps Reactor", "Garra Cangrejo", "Brazo de Vapor", "Puño Prisma", "Látigo Mecánico",
-	"Brazo Cohete", "Tenaza Industrial", "Módulo Fantasma", "Puño Meteoro", "Brazo Vectorial",
+	"Bíceps Reactor", "Garra Cangrejo", "Actuador de Vapor", "Puño Prisma", "Cable Articulado",
+	"Módulo Propulsor", "Tenaza de Asedio", "Módulo Sigilo", "Puño Coloso", "Actuador Vector",
 ]
 
 const LEG_NAMES := [
 	"Bota Pistón", "Pierna Saltamontes", "Oruga Compacta", "Rueda Monociclo", "Pata Arácnida",
 	"Propulsor Gemelo", "Bota Magnética", "Resorte Sísmico", "Pierna Corredora", "Flotador Iónico",
-	"Pata Garra", "Zanco Hidráulico", "Rueda Omni", "Bota Cometa", "Pierna Acorazada",
-	"Propulsor Solar", "Pata Felina", "Rodilla Taladro", "Bota Prisma", "Pierna Vectorial",
+	"Pata Garra", "Zanco Hidráulico", "Tren Omni", "Bota de Salto", "Pierna de Asedio",
+	"Propulsor Solar", "Pata de Caza", "Rodilla Barrena", "Bota Prisma", "Tren Vector",
 ]
 
 const WEAPON_NAMES := [
 	"Martillo de Pulso", "Espada Fotónica", "Tijera Industrial", "Cañón Burbuja", "Sierra Circular",
 	"Lanza Magnética", "Rayo Congelante", "Pala Cinética", "Taladro Cohete", "Escudo Búmeran",
 	"Maza Gravitatoria", "Bláster Solar", "Látigo Eléctrico", "Hacha de Plasma", "Puño Extensible",
-	"Cañón de Red", "Lanza Cometa", "Disco Prisma", "Imán Demoledor", "Orbe Vectorial",
+	"Lanzador de Red", "Pica de Cometa", "Disco Centinela", "Imán de Asedio", "Orbe de Mando",
 ]
 
 const TRAITS := [
@@ -267,6 +267,21 @@ static func normalized_stats(build: Dictionary) -> Dictionary:
 		var limits: Vector2 = STAT_RANGES[key]
 		normalized[key] = clampf(inverse_lerp(limits.x, limits.y, float(stats[key])) * 100.0, 0.0, 100.0)
 	return normalized
+
+static func chassis_class(build: Dictionary) -> String:
+	var weight: float = float(build_stats(build).weight)
+	if weight < 92.0:
+		return "EXPLORADOR"
+	if weight < 132.0:
+		return "VANGUARDIA"
+	if weight < 176.0:
+		return "ASALTO"
+	return "COLOSO"
+
+static func loadout_summary(build: Dictionary) -> String:
+	var left_name: String = str(WEAPON_NAMES[clampi(int(build.get("left_weapon", 0)), 0, 19)])
+	var right_name: String = str(WEAPON_NAMES[clampi(int(build.get("right_weapon", 0)), 0, 19)])
+	return "I · %s\nD · %s" % [left_name, right_name]
 
 static func dominant_affinity(build: Dictionary) -> String:
 	var counts := {}

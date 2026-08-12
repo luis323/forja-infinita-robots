@@ -21,6 +21,12 @@ func _draw() -> void:
 	var color: Color = Catalog.AFFINITY_COLORS[affinity]
 	var dark := color.darkened(0.48)
 	var center := Vector2(size.x * 0.5, size.y * 0.47)
+	for x in range(8, int(size.x), 18):
+		draw_line(Vector2(float(x), 4.0), Vector2(float(x), size.y - 4.0), Color(color, 0.07), 1.0)
+	for y in range(8, int(size.y), 18):
+		draw_line(Vector2(4.0, float(y)), Vector2(size.x - 4.0, float(y)), Color(color, 0.07), 1.0)
+	draw_line(Vector2(center.x - 24.0, center.y), Vector2(center.x + 24.0, center.y), Color(color, 0.18), 1.0)
+	draw_line(Vector2(center.x, center.y - 22.0), Vector2(center.x, center.y + 22.0), Color(color, 0.18), 1.0)
 	var visual_scale: float = clampf(minf(size.x / 54.0, size.y / 48.0), 1.0, 2.75)
 	draw_set_transform(center, 0.0, Vector2.ONE * visual_scale)
 	if selected:
@@ -61,6 +67,9 @@ func _draw_head(center: Vector2, color: Color, dark: Color) -> void:
 	if option_index in [3, 9, 16, 18, 19]:
 		draw_line(center + Vector2(-7.0, -height * 0.5), center + Vector2(-11.0, -height), color, 2.5)
 		draw_line(center + Vector2(7.0, -height * 0.5), center + Vector2(11.0, -height), color, 2.5)
+	if option_index >= 12:
+		draw_rect(Rect2(center + Vector2(-width * 0.68, -height * 0.30), Vector2(5.0, height * 0.75)), color.darkened(0.18), true)
+		draw_rect(Rect2(center + Vector2(width * 0.68 - 5.0, -height * 0.30), Vector2(5.0, height * 0.75)), color.darkened(0.18), true)
 
 func _draw_torso(center: Vector2, color: Color, dark: Color) -> void:
 	var width := 21.0 + float(option_index % 5) * 2.0
@@ -76,6 +85,11 @@ func _draw_torso(center: Vector2, color: Color, dark: Color) -> void:
 		draw_circle(center, 5.0 + float(option_index % 3), color)
 	else:
 		draw_rect(Rect2(center - Vector2(8.0, 3.0), Vector2(16.0, 6.0)), color, true)
+	if option_index >= 12:
+		for side in [-1.0, 1.0]:
+			var pod_center := center + Vector2(side * (width * 0.64), -height * 0.30)
+			draw_rect(Rect2(pod_center - Vector2(5.0, 5.5), Vector2(10.0, 11.0)), dark.darkened(0.10), true)
+			draw_circle(pod_center, 2.0, color)
 
 func _draw_arm(center: Vector2, color: Color, dark: Color) -> void:
 	var thin := 3.0 + float(option_index % 4)
@@ -89,6 +103,11 @@ func _draw_arm(center: Vector2, color: Color, dark: Color) -> void:
 			draw_line(center + Vector2(length, 7.0), center + Vector2(length + 7.0, 7.0 + y), color, 1.8)
 	else:
 		draw_circle(center + Vector2(length, 7.0), thin + 2.0, color)
+	if option_index >= 12:
+		draw_polygon(PackedVector2Array([
+			center + Vector2(-length - 4.0, -11.0), center + Vector2(-length + 5.0, -10.0),
+			center + Vector2(-length + 8.0, -3.0), center + Vector2(-length - 7.0, -4.0),
+		]), PackedColorArray([color.darkened(0.18)]))
 
 func _draw_leg(center: Vector2, color: Color, dark: Color) -> void:
 	var spread := 5.0 + float(option_index % 4)
@@ -101,6 +120,9 @@ func _draw_leg(center: Vector2, color: Color, dark: Color) -> void:
 		draw_circle(center + Vector2(-spread * 0.5, 12.0), 2.5, Color("172038"))
 	else:
 		draw_rect(Rect2(center + Vector2(-spread - 3.0, 10.0), Vector2(15.0, 5.0)), color, true)
+	if option_index >= 12:
+		draw_rect(Rect2(knee + Vector2(-8.0, -4.5), Vector2(16.0, 9.0)), Color(dark, 0.92), true)
+		draw_line(knee + Vector2(-6.0, 0.0), knee + Vector2(6.0, 0.0), color, 2.0)
 
 func _draw_weapon(center: Vector2, color: Color, dark: Color) -> void:
 	match option_index:
