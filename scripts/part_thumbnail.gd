@@ -54,11 +54,16 @@ func _draw() -> void:
 		draw_circle(center + Vector2(0.0, 6.0), 2.0, Color("fff1bd"))
 
 func _draw_head(center: Vector2, color: Color, dark: Color) -> void:
-	var width := 20.0 + float(option_index % 4) * 2.2
-	var height := 15.0 + float(floori(float(option_index) / 4.0) % 3) * 2.0
-	draw_rect(Rect2(center - Vector2(width * 0.5, height * 0.5), Vector2(width, height)), dark, true)
+	var width := 24.0 + float(option_index % 4) * 2.0
+	var height := 17.0 + float(floori(float(option_index) / 4.0) % 3) * 2.0
+	var cap_radius := height * 0.50
+	draw_rect(Rect2(center + Vector2(-width * 0.5 + cap_radius, -height * 0.5), Vector2(width - cap_radius * 2.0, height)), dark, true)
+	draw_circle(center + Vector2(-width * 0.5 + cap_radius, 0.0), cap_radius, dark)
+	draw_circle(center + Vector2(width * 0.5 - cap_radius, 0.0), cap_radius, dark)
+	draw_rect(Rect2(center - Vector2(width * 0.34, height * 0.30), Vector2(width * 0.68, height * 0.60)), Color("fff0d3"), true)
 	if option_index % 3 == 0:
-		draw_rect(Rect2(center + Vector2(-width * 0.36, -2.0), Vector2(width * 0.72, 4.0)), color, true)
+		for eye_x in [-5.0, 5.0]:
+			draw_circle(center + Vector2(eye_x, -1.0), 2.5, color.darkened(0.32))
 	elif option_index % 3 == 1:
 		draw_circle(center, 4.3, color)
 	else:
@@ -74,13 +79,9 @@ func _draw_head(center: Vector2, color: Color, dark: Color) -> void:
 func _draw_torso(center: Vector2, color: Color, dark: Color) -> void:
 	var width := 21.0 + float(option_index % 5) * 2.0
 	var height := 22.0 - float(option_index % 4)
-	var points := PackedVector2Array([
-		center + Vector2(-width * 0.5, -height * 0.45),
-		center + Vector2(width * 0.5, -height * 0.45),
-		center + Vector2(width * 0.36, height * 0.50),
-		center + Vector2(-width * 0.36, height * 0.50),
-	])
-	draw_polygon(points, PackedColorArray([dark]))
+	draw_circle(center, height * 0.52, dark)
+	draw_rect(Rect2(center + Vector2(-width * 0.50, -height * 0.28), Vector2(width, height * 0.56)), dark, true)
+	draw_circle(center, height * 0.34, Color("fff0d3"))
 	if option_index % 2 == 0:
 		draw_circle(center, 5.0 + float(option_index % 3), color)
 	else:
@@ -96,6 +97,10 @@ func _draw_arm(center: Vector2, color: Color, dark: Color) -> void:
 	var length := 11.0 + float(option_index % 6)
 	var elbow := center + Vector2(-5.0, 1.0)
 	draw_line(center + Vector2(-length, -8.0), elbow, dark, thin + 2.0)
+	for segment in range(4):
+		var t := float(segment) / 3.0
+		var point := (center + Vector2(-length, -8.0)).lerp(elbow, t)
+		draw_circle(point, thin * 0.68, color)
 	draw_circle(elbow, thin, color)
 	draw_line(elbow, center + Vector2(length, 7.0), dark, thin)
 	if option_index % 5 == 0:
@@ -119,7 +124,8 @@ func _draw_leg(center: Vector2, color: Color, dark: Color) -> void:
 		draw_circle(center + Vector2(-spread * 0.5, 12.0), 6.0, color)
 		draw_circle(center + Vector2(-spread * 0.5, 12.0), 2.5, Color("172038"))
 	else:
-		draw_rect(Rect2(center + Vector2(-spread - 3.0, 10.0), Vector2(15.0, 5.0)), color, true)
+		draw_rect(Rect2(center + Vector2(-spread - 6.0, 8.0), Vector2(21.0, 8.0)), color, true)
+		draw_circle(center + Vector2(8.0, 12.0), 4.0, color.lightened(0.12))
 	if option_index >= 12:
 		draw_rect(Rect2(knee + Vector2(-8.0, -4.5), Vector2(16.0, 9.0)), Color(dark, 0.92), true)
 		draw_line(knee + Vector2(-6.0, 0.0), knee + Vector2(6.0, 0.0), color, 2.0)

@@ -24,17 +24,17 @@ const LABELS := {
 }
 
 const HEAD_NAMES := [
-	"Visor Aurora", "Cráneo Prisma", "Domo Cíclope", "Yelmo Cometa", "Cubo-8",
-	"Radar Mariposa", "Faros Gemelos", "Máscara Voltio", "Nodo Oráculo", "Meteorito",
-	"Cabeza Taladro", "Antena Coral", "Visor de Asedio", "Cabina Holográfica", "Sensor Panorámico",
-	"Casco Vanguardia", "Cúpula Centinela", "Radar Tormenta", "Cabina Abisal", "Corona de Mando",
+	"Televisor Aurora", "Domo Prisma", "Ojo Cíclope", "Casco Cometa", "Cubo-8",
+	"Radar Mariposa", "Ojitos Gemelos", "Máscara Voltio", "Nodo Oráculo", "Casco Meteorito",
+	"Nariz Taladro", "Antena Coral", "Visor Retro", "Pantalla Holográfica", "Ojos Panorámicos",
+	"Casco Vanguardia", "Domo Sonriente", "Radar Tormenta", "Pantalla Abisal", "Corona de Mando",
 ]
 
 const TORSO_NAMES := [
-	"Núcleo Colmena", "Reactor Solar", "Pecho Fortaleza", "Chasis Avispa", "Cámara Glacial",
+	"Panel Colmena", "Reloj Solar", "Barriga Fortaleza", "Chasis Avispa", "Cámara Glacial",
 	"Reactor Cobalto", "Caparazón Tortuga", "Bastidor Acróbata", "Motor Vórtice", "Placa Meteoro",
 	"Cofre Magnético", "Chasis Submarino", "Bastión de Rescate", "Reactor de Asedio", "Bastidor Ala Alta",
-	"Coraza Locomotora", "Armadura Foresta", "Bastidor Prisma", "Coraza Dragón", "Núcleo de Mando",
+	"Barriga Locomotora", "Carcasa Foresta", "Panel Prisma", "Coraza Dragón", "Reloj de Mando",
 ]
 
 const ARM_NAMES := [

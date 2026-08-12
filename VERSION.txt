@@ -1,2 +1,2 @@
-Forja Infinita: Robots Kids v2.0.0
+Forja Infinita: Robots Kids v2.1.0
 Base tecnica reconstruida desde Sendas del Alba v0.28.1.

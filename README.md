@@ -1,4 +1,13 @@
-# Forja Infinita: Robots Kids v2.0.0
+# Forja Infinita: Robots Kids v2.1.0
+
+## Robots retro amigables
+
+- Nuevo estilo 3D de juguete inspirado en ilustraciones clásicas de robots simpáticos, con diseños originales.
+- Cabezas más grandes, placas faciales claras, ojos expresivos y antenas de distintos tamaños.
+- Torsos redondeados con paneles circulares, luces y botones de colores.
+- Brazos más delgados con articulaciones visibles, anillos mecánicos y manos redondas o tipo pinza.
+- Piernas más cortas con rodillas grandes y botas exageradas, redondeadas y estables.
+- Materiales con menos brillo metálico y colores más vivos para que todos los modos compartan el nuevo aspecto.
 
 ## Nuevo hangar táctico
 

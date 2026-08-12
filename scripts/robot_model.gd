@@ -358,11 +358,17 @@ func _build_part(slot: String, index: int) -> Node3D:
 	return root
 
 func _build_torso(root: Node3D, index: int, metal: Color, accent: Color) -> void:
-	root.position = Vector3(0.0, 2.76, 0.0)
-	var size := Vector3(float(TORSO_WIDTH[index]), float(TORSO_HEIGHT[index]), float(TORSO_DEPTH[index]))
-	_add_shape(root, index % 5, size, metal, false)
-	_add_shape(root, 0, Vector3(size.x * 0.46, size.y * 0.31, 0.16), accent, true, Vector3(0.0, 0.04, size.z * 0.54))
-	_add_shape(root, 2, Vector3(0.34, 0.34, 0.22), Color("fff173"), true, Vector3(0.0, 0.05, size.z * 0.65))
+	root.position = Vector3(0.0, 2.70, 0.0)
+	var size := Vector3(float(TORSO_WIDTH[index]) * 1.04, float(TORSO_HEIGHT[index]) * 0.92, float(TORSO_DEPTH[index]) * 1.02)
+	var shell_shape := 0 if index in [3, 7, 14, 18] else 3
+	_add_shape(root, shell_shape, size, metal, false)
+	var panel_color := Color("fff0cf").lerp(accent, 0.12)
+	var chest_panel := _add_shape(root, 3, Vector3(size.x * 0.66, size.y * 0.64, 0.20), panel_color, false, Vector3(0.0, 0.02, size.z * 0.55))
+	chest_panel.name = "RetroChestPanel"
+	_add_shape(root, 2, Vector3(0.48, 0.48, 0.20), accent, true, Vector3(0.0, 0.04, size.z * 0.70))
+	_add_shape(root, 1, Vector3(0.34, 0.34, 0.34), accent.darkened(0.20), false, Vector3(0.0, size.y * 0.58, 0.0))
+	for button_x in [-0.42, 0.42]:
+		_add_shape(root, 2, Vector3(0.14, 0.14, 0.10), Color("ffb84f") if button_x < 0.0 else Color("74e8ff"), true, Vector3(button_x, -size.y * 0.28, size.z * 0.67))
 	match index:
 		0:
 			for x in [-0.52, 0.52]:
@@ -421,10 +427,19 @@ func _build_torso(root: Node3D, index: int, metal: Color, accent: Color) -> void
 
 func _build_head(root: Node3D, index: int, metal: Color, accent: Color) -> void:
 	root.position = Vector3(0.0, 4.18, 0.0)
-	var width: float = [1.18, 1.04, 1.10, 1.26, 1.12, 1.34, 1.22, 0.98, 1.08, 1.38, 0.92, 1.16, 1.28, 1.02, 1.36, 1.20, 1.24, 1.06, 0.96, 1.30][index]
-	var height: float = [0.78, 1.02, 1.08, 0.72, 1.04, 0.68, 0.82, 1.12, 0.92, 0.86, 1.18, 0.80, 0.70, 1.12, 0.74, 0.90, 1.00, 0.82, 1.20, 0.76][index]
-	var depth: float = [0.84, 0.82, 1.02, 0.76, 0.92, 0.88, 0.78, 0.86, 0.90, 1.02, 0.76, 0.84, 0.96, 0.80, 0.88, 1.08, 0.94, 0.82, 0.78, 0.90][index]
-	_add_shape(root, index % 5, Vector3(width, height, depth), metal, false)
+	var width: float = [1.48, 1.38, 1.44, 1.56, 1.52, 1.64, 1.50, 1.40, 1.48, 1.66, 1.36, 1.54, 1.58, 1.46, 1.68, 1.54, 1.60, 1.44, 1.40, 1.62][index]
+	var height: float = [0.94, 1.12, 1.16, 0.92, 1.10, 0.90, 0.98, 1.18, 1.06, 1.00, 1.20, 0.98, 0.90, 1.16, 0.94, 1.04, 1.12, 0.98, 1.22, 0.96][index]
+	var depth: float = [0.90, 0.88, 1.04, 0.84, 0.98, 0.94, 0.86, 0.92, 0.96, 1.06, 0.84, 0.90, 1.02, 0.88, 0.94, 1.10, 1.00, 0.88, 0.84, 0.96][index]
+	var shell_shape := 0 if index in [0, 4, 7, 12, 18] else 3
+	_add_shape(root, shell_shape, Vector3(width, height, depth), metal, false)
+	var faceplate_color := Color("fff1d6").lerp(accent, 0.08)
+	var faceplate := _add_shape(root, 3, Vector3(width * 0.78, height * 0.70, 0.18), faceplate_color, false, Vector3(0.0, -0.01, depth * 0.55))
+	faceplate.name = "RetroFaceplate"
+	for ear_side in [-1.0, 1.0]:
+		_add_shape(root, 1, Vector3(0.24, 0.16, 0.24), accent, true, Vector3(ear_side * width * 0.54, 0.0, 0.0), Vector3(0.0, 0.0, 90.0))
+	var antenna_x := -0.32 if index % 2 == 0 else 0.32
+	_add_shape(root, 1, Vector3(0.07, 0.48 + float(index % 3) * 0.10, 0.07), metal.darkened(0.18), false, Vector3(antenna_x, height * 0.70, 0.0))
+	_add_shape(root, 2, Vector3(0.15, 0.15, 0.15), Color("ffb84f"), true, Vector3(antenna_x, height * 0.98 + float(index % 3) * 0.05, 0.0))
 	match index:
 		0:
 			_add_shape(root, 0, Vector3(0.86, 0.15, 0.12), accent, true, Vector3(0.0, 0.02, depth * 0.54))
@@ -487,7 +502,7 @@ func _build_expression(head_root: Node3D, depth: float, expression: int) -> void
 	head_root.add_child(_face_root)
 	var eye_color := Color("72ecff")
 	var mouth_color := Color("fff173")
-	var eye_y := 0.11
+	var eye_y := 0.12
 	match expression:
 		0:
 			_add_face_eye(-0.27, eye_y, 0.0, eye_color)
@@ -525,10 +540,12 @@ func _build_expression(head_root: Node3D, depth: float, expression: int) -> void
 			_add_face_mouth(0.15, -0.18, 17.0, Color("ff8fe1"))
 
 func _add_face_eye(x: float, y: float, angle: float, color: Color) -> void:
-	_add_shape(_face_root, 0, Vector3(0.25, 0.105, 0.065), color, true, Vector3(x, y, 0.0), Vector3(0.0, 0.0, angle))
+	_add_shape(_face_root, 3, Vector3(0.30, 0.20, 0.07), Color("fffdf5"), false, Vector3(x, y, 0.0), Vector3(0.0, 0.0, angle))
+	_add_shape(_face_root, 2, Vector3(0.11, 0.14, 0.06), color.darkened(0.28), true, Vector3(x, y, 0.05))
 
 func _add_face_round_eye(x: float, y: float, color: Color) -> void:
-	_add_shape(_face_root, 2, Vector3(0.17, 0.17, 0.065), color, true, Vector3(x, y, 0.0))
+	_add_shape(_face_root, 2, Vector3(0.25, 0.28, 0.07), Color("fffdf5"), false, Vector3(x, y, 0.0))
+	_add_shape(_face_root, 2, Vector3(0.11, 0.14, 0.06), color.darkened(0.28), true, Vector3(x, y, 0.05))
 
 func _add_face_mouth(x: float, y: float, angle: float, color: Color, width: float = 0.30) -> void:
 	_add_shape(_face_root, 0, Vector3(width, 0.065, 0.06), color, true, Vector3(x, y, 0.0), Vector3(0.0, 0.0, angle))
@@ -548,26 +565,28 @@ func play_maneuver(side_amount: float, forward_amount: float) -> void:
 func _build_arm(root: Node3D, slot: String, index: int, metal: Color, accent: Color) -> void:
 	var side := -1.0 if slot == "left_arm" else 1.0
 	var side_name := "left" if side < 0.0 else "right"
-	var upper_length := float(ARM_UPPER[index])
-	var lower_length := float(ARM_LOWER[index])
-	var width := float(ARM_WIDTH[index])
-	root.position = Vector3(side * (1.22 + width * 0.25), 3.38, 0.0)
-	_add_shape(root, 2, Vector3(width * 1.35, width * 1.35, width * 1.35), accent, true)
+	var upper_length := float(ARM_UPPER[index]) * 0.88
+	var lower_length := float(ARM_LOWER[index]) * 0.88
+	var width := float(ARM_WIDTH[index]) * 0.82
+	root.position = Vector3(side * (1.25 + width * 0.30), 3.36, 0.0)
+	_add_shape(root, 2, Vector3(width * 1.82, width * 1.82, width * 1.82), accent, true)
 	var upper := Node3D.new()
 	upper.name = "Upper"
 	root.add_child(upper)
-	_add_shape(upper, index % 5, Vector3(width, upper_length, width * 1.05), metal, false, Vector3(0.0, -upper_length * 0.5, 0.0))
+	_add_shape(upper, 3, Vector3(width, upper_length, width * 1.05), metal, false, Vector3(0.0, -upper_length * 0.5, 0.0))
+	for ring in range(3):
+		_add_shape(upper, 1, Vector3(width * 1.22, 0.055, width * 1.22), accent, true, Vector3(0.0, -upper_length * (0.22 + ring * 0.25), 0.0))
 	var elbow := Node3D.new()
 	elbow.name = "Elbow"
 	elbow.position.y = -upper_length
 	upper.add_child(elbow)
 	_add_shape(elbow, 2, Vector3(width * 1.10, width * 1.10, width * 1.10), accent, true)
-	_add_shape(elbow, (index + 2) % 5, Vector3(width * 0.88, lower_length, width * 0.92), metal.darkened(0.06), false, Vector3(0.0, -lower_length * 0.5, 0.0))
+	_add_shape(elbow, 3, Vector3(width * 0.88, lower_length, width * 0.92), metal.darkened(0.06), false, Vector3(0.0, -lower_length * 0.5, 0.0))
 	var hand := Node3D.new()
 	hand.name = "WeaponMount"
 	hand.position = Vector3(0.0, -lower_length, 0.0)
 	elbow.add_child(hand)
-	_add_shape(hand, 4, Vector3(width * 1.20, width * 0.62, width * 1.18), accent, true)
+	_add_shape(hand, 2, Vector3(width * 1.62, width * 1.38, width * 1.62), accent, true)
 	motion_joints[slot + "_upper"] = upper
 	motion_joints[slot + "_elbow"] = elbow
 	weapon_mounts[side_name] = hand
@@ -615,15 +634,16 @@ func _build_arm(root: Node3D, slot: String, index: int, metal: Color, accent: Co
 
 func _build_leg(root: Node3D, slot: String, index: int, metal: Color, accent: Color) -> void:
 	var side := -1.0 if slot == "left_leg" else 1.0
-	var upper_length := float(LEG_UPPER[index])
-	var lower_length := float(LEG_LOWER[index])
-	var width := float(LEG_WIDTH[index])
-	root.position = Vector3(side * 0.56, 2.12, 0.0)
-	_add_shape(root, 2, Vector3(width * 1.14, width * 1.14, width * 1.14), accent, true)
+	var upper_length := float(LEG_UPPER[index]) * 0.84
+	var lower_length := float(LEG_LOWER[index]) * 0.84
+	var width := float(LEG_WIDTH[index]) * 0.90
+	var leg_total := upper_length + lower_length
+	root.position = Vector3(side * 0.56, 2.12 - maxf(0.0, 1.52 - leg_total), 0.0)
+	_add_shape(root, 2, Vector3(width * 1.52, width * 1.52, width * 1.52), accent, true)
 	var upper := Node3D.new()
 	upper.name = "Upper"
 	root.add_child(upper)
-	_add_shape(upper, index % 5, Vector3(width, upper_length, width * 1.12), metal, false, Vector3(0.0, -upper_length * 0.5, 0.0))
+	_add_shape(upper, 3, Vector3(width, upper_length, width * 1.12), metal, false, Vector3(0.0, -upper_length * 0.5, 0.0))
 	var knee := Node3D.new()
 	knee.name = "Knee"
 	knee.position.y = -upper_length
@@ -632,10 +652,13 @@ func _build_leg(root: Node3D, slot: String, index: int, metal: Color, accent: Co
 	if index in [2, 3, 12]:
 		_add_shape(knee, 1, Vector3(width * 1.65, lower_length * 1.16, width * 1.65), metal, false, Vector3(0.0, -lower_length * 0.48, 0.0), Vector3(90.0, 0.0, 0.0))
 	else:
-		_add_shape(knee, (index + 1) % 5, Vector3(width * 0.90, lower_length, width), metal.darkened(0.06), false, Vector3(0.0, -lower_length * 0.5, 0.0))
+		_add_shape(knee, 3, Vector3(width * 0.90, lower_length, width), metal.darkened(0.06), false, Vector3(0.0, -lower_length * 0.5, 0.0))
 	var foot_y := -lower_length
-	var foot_size := Vector3(width * 1.42, width * 0.56, width * (2.25 if index in [1, 8, 13, 16] else 1.72))
-	_add_shape(knee, 0, foot_size, accent.darkened(0.12), false, Vector3(0.0, foot_y, foot_size.z * 0.20))
+	var foot_size := Vector3(width * 2.20, width * 0.88, width * (3.00 if index in [1, 8, 13, 16] else 2.56))
+	_add_shape(knee, 0, foot_size, accent.darkened(0.12), false, Vector3(0.0, foot_y, foot_size.z * 0.22))
+	var boot_toe := _add_shape(knee, 2, Vector3(width * 2.08, width * 0.90, width * 2.08), accent.lightened(0.10), false, Vector3(0.0, foot_y + 0.02, foot_size.z * 0.68))
+	boot_toe.name = "RetroBootToe"
+	_add_shape(knee, 0, Vector3(width * 2.34, 0.10, foot_size.z * 1.04), Color("26314a"), false, Vector3(0.0, foot_y - width * 0.48, foot_size.z * 0.25))
 	motion_joints[slot + "_upper"] = upper
 	motion_joints[slot + "_knee"] = knee
 	match index:
@@ -808,8 +831,8 @@ func _add_shape(parent: Node3D, shape: int, size: Vector3, color: Color, glow: b
 func _add_mesh(parent: Node3D, mesh: PrimitiveMesh, color: Color, glow: bool, offset: Vector3, rotation_degrees: Vector3, transparent: bool) -> MeshInstance3D:
 	var material := StandardMaterial3D.new()
 	material.albedo_color = color
-	material.metallic = 0.72
-	material.roughness = 0.22 if glow else 0.42
+	material.metallic = 0.32
+	material.roughness = 0.30 if glow else 0.58
 	if transparent or color.a < 0.98:
 		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		material.albedo_color.a = minf(color.a, 0.56)

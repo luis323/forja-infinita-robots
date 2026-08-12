@@ -2214,6 +2214,9 @@ func _run_smoke_test() -> void:
 	model_test.build_robot(maximum_build, BLUE, "head")
 	passed = passed and model_test.part_roots.size() == 8
 	passed = passed and model_test.expression_id == 7 and model_test.get_node_or_null("head/ExpressionFace") != null
+	passed = passed and model_test.get_node_or_null("head/RetroFaceplate") != null
+	passed = passed and model_test.get_node_or_null("torso/RetroChestPanel") != null
+	passed = passed and model_test.get_node_or_null("left_leg/Upper/Knee/RetroBootToe") != null
 	passed = passed and model_test.has_node("AssemblyHand")
 	model_test.set_damage_state(3)
 	passed = passed and model_test.has_node("MechanicalDamage")
@@ -2247,5 +2250,5 @@ func _run_smoke_test() -> void:
 	passed = passed and EXPRESSION_LABELS.size() == 8
 	passed = passed and FighterScript.CombatTactic.size() == 9
 	passed = passed and fighter_test_a._can_attack_at_distance(2.0)
-	print("FORJA_KIDS_SMOKE_TEST:", "PASS" if passed else "FAIL", " hangar_ui=OK mech_classes=4 square_thumbnails=OK assembly_hand=OK jumps=OK advanced_buttons=4 combat_tactics=9 LAN=4")
+	print("FORJA_KIDS_SMOKE_TEST:", "PASS" if passed else "FAIL", " retro_robots=OK big_faces=OK giant_boots=OK hangar_ui=OK assembly_hand=OK jumps=OK combat_tactics=9 LAN=4")
 	get_tree().quit(0 if passed else 1)
