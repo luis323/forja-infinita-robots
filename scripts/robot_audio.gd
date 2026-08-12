@@ -13,6 +13,7 @@ const SFX_VOLUMES := {
 	"heavy": -1.0,
 	"joint": -2.0,
 	"detach": 0.0,
+	"critical": 1.0,
 	"shot": -5.0,
 	"countdown": -7.0,
 	"victory": -2.0,
@@ -27,7 +28,7 @@ var _pool_index := 0
 func _ready() -> void:
 	music_player = AudioStreamPlayer.new()
 	music_player.name = "BattleMusic"
-	music_player.volume_db = -12.0
+	music_player.volume_db = -9.5
 	add_child(music_player)
 	for index in range(10):
 		var player := AudioStreamPlayer.new()
@@ -59,6 +60,16 @@ func start_battle_music() -> void:
 func stop_music() -> void:
 	music_player.stop()
 
+func pulse_battle_music(intensity: int) -> void:
+	if not music_player.playing:
+		return
+	music_player.pitch_scale = 1.02 + float(intensity) * 0.025
+	music_player.volume_db = -7.0 + float(intensity) * 0.45
+	var tween := music_player.create_tween()
+	tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tween.tween_property(music_player, "pitch_scale", 1.0, 0.42)
+	tween.parallel().tween_property(music_player, "volume_db", -9.5, 0.42)
+
 func _create_sound_bank() -> void:
 	streams.ui = _make_tone(520.0, 0.055, 18.0, "square", 0.45, 0.0)
 	streams.select = _make_tone(760.0, 0.085, 12.0, "sine", 0.62, 280.0)
@@ -70,6 +81,7 @@ func _create_sound_bank() -> void:
 	streams.heavy = _make_tone(62.0, 0.34, 11.0, "metal", 0.96, -24.0)
 	streams.joint = _make_tone(138.0, 0.24, 8.0, "metal", 0.92, -86.0)
 	streams.detach = _make_tone(74.0, 0.48, 6.5, "metal", 1.0, -28.0)
+	streams.critical = _make_critical_stinger()
 	streams.shot = _make_tone(940.0, 0.22, 11.0, "saw", 0.58, -640.0)
 	streams.countdown = _make_tone(440.0, 0.12, 10.0, "square", 0.55, 80.0)
 	streams.victory = _make_chord([523.25, 659.25, 783.99], 0.72, 4.5)
@@ -118,39 +130,55 @@ func _make_chord(frequencies: Array, duration: float, decay: float) -> AudioStre
 	return _wav_from_data(data, false)
 
 func _make_battle_music() -> AudioStreamWAV:
-	var bpm := 132.0
+	var bpm := 156.0
 	var beat_duration := 60.0 / bpm
-	var total_beats := 16
+	var total_beats := 32
 	var duration := beat_duration * total_beats
 	var sample_count := int(duration * SAMPLE_RATE)
 	var data := PackedByteArray()
 	data.resize(sample_count * 2)
-	var bass_notes := [43.65, 43.65, 51.91, 58.27, 43.65, 65.41, 58.27, 51.91]
-	var lead_steps := [0, 3, 7, 10, 7, 12, 10, 7, 0, 3, 7, 15, 12, 10, 7, 3]
+	var bass_notes := [43.65, 43.65, 51.91, 46.25, 43.65, 58.27, 51.91, 38.89]
+	var lead_steps := [0, 3, 7, 10, 7, 12, 10, 7, 0, 3, 7, 15, 12, 10, 6, 3]
 	for index in range(sample_count):
 		var time := float(index) / SAMPLE_RATE
 		var beat := time / beat_duration
 		var beat_phase := fmod(beat, 1.0)
 		var eighth := floori(beat * 2.0)
 		var bass_frequency := float(bass_notes[floori(beat) % bass_notes.size()])
-		var bass := sin(TAU * bass_frequency * time) * 0.34
-		bass += (1.0 if sin(TAU * bass_frequency * time * 0.5) > 0.0 else -1.0) * 0.08
+		var bass := sin(TAU * bass_frequency * time) * 0.30
+		bass += (1.0 if sin(TAU * bass_frequency * time * 0.5) > 0.0 else -1.0) * 0.11
 		var kick_phase := beat_phase
 		var kick_frequency := 48.0 + 90.0 * exp(-kick_phase * 18.0)
-		var kick := sin(TAU * kick_frequency * time) * exp(-kick_phase * 17.0) * 0.72
+		var kick := sin(TAU * kick_frequency * time) * exp(-kick_phase * 17.0) * 0.78
 		var snare := 0.0
 		if floori(beat) % 4 in [1, 3]:
 			snare = sin(time * 9317.0) * sin(time * 5279.0) * exp(-beat_phase * 22.0) * 0.30
 		var hat_phase := fmod(beat * 2.0, 1.0)
-		var hat := sin(time * 15731.0) * sin(time * 11213.0) * exp(-hat_phase * 35.0) * 0.09
+		var hat := sin(time * 15731.0) * sin(time * 11213.0) * exp(-hat_phase * 35.0) * 0.12
 		var semitone := int(lead_steps[eighth % lead_steps.size()])
 		var lead_frequency := 174.61 * pow(2.0, float(semitone) / 12.0)
 		var step_phase := fmod(beat * 2.0, 1.0)
-		var lead := sin(TAU * lead_frequency * time) * exp(-step_phase * 3.4) * 0.16
-		lead += sin(TAU * lead_frequency * 2.01 * time) * exp(-step_phase * 4.2) * 0.06
-		var sample := tanh((bass + kick + snare + hat + lead) * 1.18) * 0.78
+		var lead := (1.0 if sin(TAU * lead_frequency * time) >= 0.0 else -1.0) * exp(-step_phase * 4.6) * 0.12
+		lead += sin(TAU * lead_frequency * 2.01 * time) * exp(-step_phase * 5.2) * 0.07
+		var quarter_phase := fmod(beat * 4.0, 1.0)
+		var machine_pulse := sin(TAU * (bass_frequency * 4.0) * time) * exp(-quarter_phase * 12.0) * 0.07
+		var sample := tanh((bass + kick + snare + hat + lead + machine_pulse) * 1.32) * 0.80
 		_write_sample(data, index, sample)
 	return _wav_from_data(data, true)
+
+func _make_critical_stinger() -> AudioStreamWAV:
+	var duration := 0.62
+	var sample_count := int(duration * SAMPLE_RATE)
+	var data := PackedByteArray()
+	data.resize(sample_count * 2)
+	for index in range(sample_count):
+		var time := float(index) / SAMPLE_RATE
+		var progress := time / duration
+		var low := sin(TAU * (92.0 - progress * 28.0) * time) * exp(-progress * 5.0) * 0.72
+		var metal := sin(time * 11031.0) * sin(time * 4937.0) * exp(-progress * 8.0) * 0.34
+		var alarm := (1.0 if sin(TAU * (420.0 + progress * 680.0) * time) >= 0.0 else -1.0) * exp(-progress * 3.8) * 0.22
+		_write_sample(data, index, tanh((low + metal + alarm) * 1.25) * 0.92)
+	return _wav_from_data(data, false)
 
 func _write_sample(data: PackedByteArray, index: int, sample: float) -> void:
 	var value := clampi(int(clampf(sample, -1.0, 1.0) * 32767.0), -32768, 32767)

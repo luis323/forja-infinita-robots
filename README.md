@@ -1,4 +1,4 @@
-# Forja Infinita: Robots Kids v1.7.0
+# Forja Infinita: Robots Kids v1.8.0
 
 Edición infantil independiente para Godot 4.4.1, Android ARM64 y PC. Usa un identificador Android diferente, por lo que puede instalarse junto a la edición normal.
 
@@ -36,7 +36,10 @@ El modo principal está diseñado en cuatro pasos grandes y claros:
 - IA de combate compartida por Kids y adulto con rodeos, fintas, retiradas, cargas, bloqueos y esquivas laterales.
 - Los robots se separan después de atacar y cambian de distancia en lugar de permanecer pegados frente a frente.
 - Ataques con giro de torso, tres variantes de movimiento, impulso y recuperación.
-- Las piezas nunca se desprenden y los robots no muestran deterioro visual.
+- Los golpes críticos muestran anuncios arcade enormes, destello de pantalla, sonido especial y una sacudida más intensa.
+- En críticos y golpes de herramienta pueden desprenderse de forma mecánica cabezas, brazos o armas; vuelan con cables y chispas, sin efectos gráficos violentos.
+- Los desarmes cambian de verdad el combate: perder un brazo reduce fuerza y velocidad de ataque; perder la cabeza reduce puntería y energía.
+- Música original de combate industrial a 156 BPM, con percusión metálica, bajo y sintetizadores propios.
 - Un aro de luz suave sigue al robot de cada jugador dentro del ring; los rivales controlados por la CPU no lo tienen.
 - Al terminar, el robot que pierde simplemente se toma un descanso.
 - Victoria entrega tres estrellas y cada intento entrega una estrella.
@@ -45,7 +48,7 @@ El modo principal está diseñado en cuatro pasos grandes y claros:
 
 ## Opciones adicionales
 
-La edición conserva el taller completo de 160 piezas, dos jugadores en un dispositivo y LAN de 2 a 4 teléfonos. Todos usan la presentación amistosa sin desprendimiento de piezas.
+La edición conserva el taller completo de 160 piezas, dos jugadores en un dispositivo y LAN de 2 a 4 teléfonos. Todos comparten la misma IA, los críticos arcade y los desprendimientos mecánicos.
 
 ## Ejecutar en PC
 

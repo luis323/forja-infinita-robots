@@ -4,6 +4,7 @@ extends CharacterBody3D
 signal health_changed(fighter_id: int, ratio: float, current: float, maximum: float)
 signal defeated(fighter_id: int)
 signal combat_event(message: String, color: Color)
+signal arcade_event(message: String, color: Color, intensity: int)
 signal sfx_requested(kind: String, pitch: float)
 signal impact(strength: float, impact_position: Vector3)
 
@@ -387,6 +388,7 @@ func _perform_attack(distance: float) -> void:
 	var has_weapon := _side_available(use_left)
 	var special_every := maxi(3, 7 - int(float(stats.energy) / 55.0))
 	var special := attack_count % special_every == 0
+	var critical: bool = attack_count % 7 == 0
 	var damage_variation := 0.96 + float((attack_count * 13 + fighter_id * 5) % 9) * 0.01
 	var damage := float(stats.power) * damage_variation
 	if not has_weapon:
@@ -394,11 +396,10 @@ func _perform_attack(distance: float) -> void:
 	if special:
 		damage *= 1.58
 		combat_event.emit("¡%s ACTIVA PODER ESTRELLA!" % display_name if friendly_mode else "¡%s activa SOBRECARGA!" % display_name, team_color)
-	if attack_count % 8 == 0:
-		damage *= 1.45
-		combat_event.emit("¡GOLPE SÚPER!" if friendly_mode else "¡GOLPE CRÍTICO!", Color("fff173"))
+	if critical:
+		damage *= 1.62
 	var accuracy_roll := float((attack_count * 37 + fighter_id * 19) % 100)
-	if not special and accuracy_roll > float(stats.accuracy):
+	if not special and not critical and accuracy_roll > float(stats.accuracy):
 		combat_event.emit("¡CASI, %s!" % display_name if friendly_mode else "%s FALLA EL ATAQUE" % display_name, Color("d7e1ef"))
 		model.play_attack(use_left, false)
 		_disengage_timer = 0.34
@@ -413,22 +414,23 @@ func _perform_attack(distance: float) -> void:
 	elif affinity_bonus < 0.8:
 		combat_event.emit("¡PRUEBA OTRA IDEA!" if friendly_mode else "ATAQUE POCO EFECTIVO", Color("b9c5d7"))
 	if has_arm:
-		model.play_attack(use_left, special)
+		model.play_attack(use_left, special or critical)
 	else:
 		model.play_hit()
 	var is_ranged := has_weapon and float(stats.range) >= 4.35 and distance > 2.3
 	if is_ranged:
 		sfx_requested.emit("shot", 0.90 + _rng.randf_range(-0.06, 0.10))
-		_launch_energy_orb(opponent, damage, special)
+		_launch_energy_orb(opponent, damage, special, critical, use_left, int(build.get("left_weapon" if use_left else "right_weapon", 0)))
 	else:
 		sfx_requested.emit("swing", 0.86 if special else 1.0 + _rng.randf_range(-0.08, 0.10))
 		var rush := opponent.global_position - global_position
 		rush.y = 0.0
 		if rush.length() > 0.05:
 			_impulse_velocity += rush.normalized() * (7.2 if special else 5.1)
-		var contact_delay := 0.38 if special else 0.25
+		var contact_delay := 0.42 if special or critical else 0.25
 		var combo_ready := attack_count % 5 == 0 and not special and has_arm
-		get_tree().create_timer(contact_delay).timeout.connect(_resolve_melee_hit.bind(opponent, damage, special, use_left, combo_ready))
+		var weapon_index: int = int(build.get("left_weapon" if use_left else "right_weapon", 0))
+		get_tree().create_timer(contact_delay).timeout.connect(_resolve_melee_hit.bind(opponent, damage, special, use_left, combo_ready, critical, weapon_index))
 	attack_cooldown = maxf(0.42, 1.46 / float(stats.attack_speed))
 	if special:
 		attack_cooldown += 0.28
@@ -448,6 +450,7 @@ func _perform_manual_heavy() -> void:
 	var damage := float(stats.power) * 1.82 * Catalog.affinity_multiplier(attack_affinity, defend_affinity)
 	var weapon_slot := "left_weapon" if use_left else "right_weapon"
 	var weapon_index := int(build.get(weapon_slot, 0))
+	var critical: bool = attack_count % 2 == 0
 	model.play_attack(use_left, true)
 	sfx_requested.emit("heavy", 0.82)
 	var rush := opponent.global_position - global_position
@@ -455,10 +458,12 @@ func _perform_manual_heavy() -> void:
 	if rush.length() > 0.05:
 		_impulse_velocity += rush.normalized() * 10.5
 	combat_event.emit("¡%s USA SU SUPERPODER!" % display_name if friendly_mode else "¡%s USA SU HERRAMIENTA!" % display_name, team_color)
-	get_tree().create_timer(0.42).timeout.connect(_resolve_tool_hit.bind(opponent, damage, weapon_index, use_left))
+	if critical:
+		damage *= 1.35
+	get_tree().create_timer(0.42).timeout.connect(_resolve_tool_hit.bind(opponent, damage, weapon_index, use_left, critical))
 	attack_cooldown = 1.05
 
-func _resolve_melee_hit(victim: ArenaFighter, damage: float, special: bool, use_left: bool, combo_ready: bool) -> void:
+func _resolve_melee_hit(victim: ArenaFighter, damage: float, special: bool, use_left: bool, combo_ready: bool, critical: bool, weapon_index: int) -> void:
 	if not active or not is_instance_valid(victim) or victim.hp <= 0.0:
 		return
 	var distance := global_position.distance_to(victim.global_position)
@@ -468,7 +473,10 @@ func _resolve_melee_hit(victim: ArenaFighter, damage: float, special: bool, use_
 		return
 	var impact_position := victim.model.get_part_world_position("torso")
 	impact_position += Vector3((-0.32 if use_left else 0.32), 0.10, 0.36)
-	victim.take_damage(damage, global_position, special, impact_position)
+	if critical:
+		victim.take_arcade_critical(damage, global_position, weapon_index, use_left, impact_position)
+	else:
+		victim.take_damage(damage, global_position, special, impact_position)
 	var recoil := global_position - victim.global_position
 	recoil.y = 0.0
 	if recoil.length() > 0.05:
@@ -478,13 +486,16 @@ func _resolve_melee_hit(victim: ArenaFighter, damage: float, special: bool, use_
 	if combo_ready and victim.hp > 0.0:
 		get_tree().create_timer(0.24).timeout.connect(_combo_strike.bind(victim, damage * 0.28, global_position))
 
-func _resolve_tool_hit(victim: ArenaFighter, damage: float, weapon_index: int, use_left: bool) -> void:
+func _resolve_tool_hit(victim: ArenaFighter, damage: float, weapon_index: int, use_left: bool, critical: bool) -> void:
 	if not active or not is_instance_valid(victim) or victim.hp <= 0.0:
 		return
 	if global_position.distance_to(victim.global_position) > _melee_contact_range() + 0.85:
 		combat_event.emit("LA HERRAMIENTA DE %s NO ALCANZA" % display_name, Color("c4cfdd"))
 		return
-	victim.take_tool_hit(damage, global_position, weapon_index, use_left)
+	if critical:
+		victim.take_arcade_critical(damage, global_position, weapon_index, use_left, Vector3.ZERO, "¡IMPACTO BRUTAL!")
+	else:
+		victim.take_tool_hit(damage, global_position, weapon_index, use_left)
 	_disengage_timer = 1.05
 	model.play_maneuver(_strafe_direction * 0.65, -0.80)
 
@@ -492,6 +503,7 @@ func _combo_strike(victim: ArenaFighter, damage: float, source_position: Vector3
 	if not active or not is_instance_valid(victim) or victim.hp <= 0.0:
 		return
 	sfx_requested.emit("swing", 1.18)
+	arcade_event.emit("¡COMBO x2!", Color("c58cff"), 1)
 	var use_left := _choose_arm_side(attack_count % 2 != 0)
 	model.play_attack(use_left, false)
 	var rush := victim.global_position - global_position
@@ -511,16 +523,10 @@ func _resolve_combo_hit(victim: ArenaFighter, damage: float, source_position: Ve
 func take_tool_hit(raw_damage: float, source_position: Vector3, weapon_index: int, attacker_used_left: bool) -> void:
 	if not active or hp <= 0.0:
 		return
-	if friendly_mode:
-		var friendly_contact := model.get_part_world_position("torso") + Vector3(0.0, 0.18, 0.32)
-		take_damage(raw_damage * 0.90, source_position, true, friendly_contact)
-		if hp > 0.0:
-			combat_event.emit("¡SUPEREMPUJÓN DE COLORES!", Color("ffe36e"))
-		return
 	var target_slot := _choose_joint_target(weapon_index, attacker_used_left)
 	var impact_position := model.get_part_world_position(target_slot) if not target_slot.is_empty() else model.get_part_world_position("torso")
-	take_damage(raw_damage, source_position, true, impact_position)
-	if hp <= 0.0 or target_slot.is_empty():
+	take_damage(raw_damage * (0.92 if friendly_mode else 1.0), source_position, true, impact_position)
+	if target_slot.is_empty():
 		return
 	var tool_factor := 1.42 if weapon_index in CUTTING_WEAPONS else (1.16 if weapon_index in FORCE_WEAPONS else 1.04)
 	var armor_factor := 100.0 / (100.0 + float(stats.armor) * 0.62 + float(stats.stability) * 0.22)
@@ -533,6 +539,20 @@ func take_tool_hit(raw_damage: float, source_position: Vector3, weapon_index: in
 		var damage_ratio := 1.0 - float(joint_integrity[target_slot]) / float(joint_maximum.get(target_slot, 1.0))
 		combat_event.emit("UNIÓN %s DAÑADA · %.0f%%" % [PART_LABELS[target_slot], damage_ratio * 100.0], Color("ffb45f"))
 		sfx_requested.emit("joint", 1.04)
+
+func take_arcade_critical(raw_damage: float, source_position: Vector3, weapon_index: int, attacker_used_left: bool, contact_position := Vector3.ZERO, arcade_title: String = "¡GOLPE CRÍTICO!") -> void:
+	if not active or hp <= 0.0:
+		return
+	arcade_event.emit(arcade_title, Color("ff8b55") if arcade_title.contains("BRUTAL") else Color("fff173"), 3 if arcade_title.contains("BRUTAL") else 2)
+	sfx_requested.emit("critical", 0.84 if arcade_title.contains("BRUTAL") else 0.96)
+	var target_slot: String = _choose_joint_target(weapon_index, attacker_used_left)
+	var impact_position: Vector3 = contact_position
+	if impact_position == Vector3.ZERO:
+		impact_position = model.get_part_world_position(target_slot) if not target_slot.is_empty() else model.get_part_world_position("torso")
+	take_damage(raw_damage, source_position, true, impact_position)
+	_spawn_joint_burst(impact_position, true)
+	if not target_slot.is_empty():
+		_detach_combat_part(target_slot, source_position, impact_position)
 
 func _choose_joint_target(weapon_index: int, attacker_used_left: bool) -> String:
 	var first_side := "right" if attacker_used_left else "left"
@@ -566,6 +586,7 @@ func _detach_combat_part(slot: String, source_position: Vector3, impact_position
 	sfx_requested.emit("detach", 0.88)
 	impact.emit(0.46, impact_position)
 	combat_event.emit("¡DESARME! %s PIERDE %s" % [display_name, PART_LABELS[slot]], Color("fff173"))
+	arcade_event.emit("¡PIEZA FUERA!", Color("67dfff"), 3)
 
 func _apply_detach_penalty(slot: String) -> void:
 	match slot:
@@ -595,7 +616,7 @@ func take_damage(raw_damage: float, source_position: Vector3, heavy: bool, conta
 	var strong_push := heavy or _received_hits % 4 == 0
 	model.play_hit(strong_push)
 	var damage_ratio := 1.0 - hp / max_hp
-	model.set_damage_state(0 if friendly_mode else (3 if damage_ratio >= 0.78 else (2 if damage_ratio >= 0.52 else (1 if damage_ratio >= 0.25 else 0))))
+	model.set_damage_state(3 if damage_ratio >= 0.78 else (2 if damage_ratio >= 0.52 else (1 if damage_ratio >= 0.25 else 0)))
 	sfx_requested.emit("heavy" if heavy else "hit", 0.92 + _rng.randf_range(-0.07, 0.08))
 	var actual_contact: Vector3 = contact_position if contact_position != Vector3.ZERO else global_position + Vector3(0.0, 2.2, 0.0)
 	impact.emit(0.42 if heavy else (0.30 if strong_push else 0.20), actual_contact)
@@ -623,11 +644,11 @@ func force_defeat() -> void:
 	hp = 0.0
 	active = false
 	health_changed.emit(fighter_id, 0.0, hp, max_hp)
-	model.set_damage_state(0 if friendly_mode else 3)
+	model.set_damage_state(3)
 	model.play_defeat()
 	defeated.emit(fighter_id)
 
-func _launch_energy_orb(victim: ArenaFighter, damage: float, heavy: bool) -> void:
+func _launch_energy_orb(victim: ArenaFighter, damage: float, heavy: bool, critical: bool, use_left: bool, weapon_index: int) -> void:
 	var orb := MeshInstance3D.new()
 	var sphere := SphereMesh.new()
 	sphere.radius = 0.18 if not heavy else 0.30
@@ -651,7 +672,10 @@ func _launch_energy_orb(victim: ArenaFighter, damage: float, heavy: bool) -> voi
 	tween.parallel().tween_property(orb, "scale", Vector3.ONE * (1.8 if heavy else 1.35), travel_time)
 	tween.tween_callback(func() -> void:
 		if is_instance_valid(victim):
-			victim.take_damage(damage, global_position, heavy)
+			if critical:
+				victim.take_arcade_critical(damage, global_position, weapon_index, use_left)
+			else:
+				victim.take_damage(damage, global_position, heavy)
 		if is_instance_valid(orb):
 			orb.queue_free()
 	)

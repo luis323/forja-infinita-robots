@@ -114,14 +114,14 @@ func detach_part(slot: String, impulse_direction: Vector3) -> bool:
 	var direction := impulse_direction.normalized()
 	if direction.length() < 0.05:
 		direction = Vector3(1.0, 0.0, 0.0)
-	var destination := root.global_position + direction * 2.2 + Vector3(0.0, 1.45, 0.0)
+	var destination := root.global_position + direction * 3.8 + Vector3(0.0, 2.25, 0.0)
 	var ground_position := destination
 	ground_position.y = 0.34
-	var spin := root.rotation + Vector3(2.8, 3.9, -2.4) * (1.0 if side_name == "right" else -1.0)
+	var spin := root.rotation + Vector3(5.4, 7.2, -4.8) * (1.0 if side_name == "right" else -1.0)
 	var tween := root.create_tween()
 	tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	tween.tween_property(root, "global_position", destination, 0.55)
-	tween.parallel().tween_property(root, "rotation", spin, 0.55)
+	tween.tween_property(root, "global_position", destination, 0.62)
+	tween.parallel().tween_property(root, "rotation", spin, 0.62)
 	tween.set_trans(Tween.TRANS_BOUNCE).set_ease(Tween.EASE_OUT)
 	tween.tween_property(root, "global_position", ground_position, 0.62)
 	tween.tween_interval(8.5)

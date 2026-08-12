@@ -1188,6 +1188,7 @@ func _start_battle() -> void:
 		fighter.health_changed.connect(_on_health_changed)
 		fighter.defeated.connect(_on_fighter_defeated)
 		fighter.combat_event.connect(_show_battle_message)
+		fighter.arcade_event.connect(_show_arcade_callout)
 		fighter.sfx_requested.connect(_on_fighter_sfx)
 		fighter.impact.connect(_on_fighter_impact)
 		fighters.append(fighter)
@@ -1677,6 +1678,51 @@ func _show_battle_message(message: String, color: Color) -> void:
 	message_tween.tween_interval(0.85)
 	message_tween.tween_property(battle_message, "modulate:a", 0.0, 0.28)
 
+func _show_arcade_callout(message: String, color: Color, intensity: int) -> void:
+	if state != GameState.BATTLE:
+		return
+	camera_shake = maxf(camera_shake, 0.32 + float(intensity) * 0.16)
+	if audio:
+		audio.pulse_battle_music(intensity)
+	var flash := ColorRect.new()
+	flash.set_anchors_preset(Control.PRESET_FULL_RECT)
+	var flash_color: Color = color
+	flash_color.a = 0.14 + float(intensity) * 0.035
+	flash.color = flash_color
+	flash.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ui_root.add_child(flash)
+	var callout := Label.new()
+	callout.text = message
+	callout.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	callout.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	callout.anchor_left = 0.12
+	callout.anchor_top = 0.34
+	callout.anchor_right = 0.88
+	callout.anchor_bottom = 0.60
+	callout.add_theme_font_size_override("font_size", 56 + intensity * 10)
+	callout.add_theme_color_override("font_color", color)
+	callout.add_theme_color_override("font_outline_color", Color("e6000714"))
+	callout.add_theme_constant_override("outline_size", 10 + intensity * 2)
+	callout.add_theme_color_override("font_shadow_color", color.darkened(0.60))
+	callout.add_theme_constant_override("shadow_offset_x", 8)
+	callout.add_theme_constant_override("shadow_offset_y", 10)
+	callout.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	callout.scale = Vector2(0.22, 0.22)
+	ui_root.add_child(callout)
+	callout.pivot_offset = callout.size * 0.5
+	var flash_tween := flash.create_tween()
+	flash_tween.tween_property(flash, "modulate:a", 0.0, 0.18 + float(intensity) * 0.04)
+	flash_tween.tween_callback(flash.queue_free)
+	var tween := callout.create_tween()
+	tween.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	tween.tween_property(callout, "scale", Vector2(1.10, 1.10), 0.16)
+	tween.tween_property(callout, "scale", Vector2.ONE, 0.10)
+	tween.tween_interval(0.46 + float(intensity) * 0.08)
+	tween.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tween.tween_property(callout, "scale", Vector2(1.75, 0.35), 0.16)
+	tween.parallel().tween_property(callout, "modulate:a", 0.0, 0.16)
+	tween.tween_callback(callout.queue_free)
+
 func _show_help() -> void:
 	state = GameState.HELP
 	_clear_ui()
@@ -1690,9 +1736,9 @@ func _show_help() -> void:
 		"1  ELIGE Y CAMBIA PARTES\nToca directamente el robot: los controles son invisibles para que puedas verlo completo. También puedes usar las categorías del costado. En modo fácil hay cuatro opciones por zona.\n\n" +
 		"2  ELIGE SU CARA\nPrueba ocho expresiones divertidas. La cara elegida aparece en el taller y durante toda la pelea.\n\n" +
 		"3  CONOCE A TU RIVAL\nLos puntos muestran quién tiene más vida, fuerza y rapidez.\n\n" +
-		"4  ¡JUEGA!\nLos robots rodean, amagan, esquivan, cargan y se separan después de atacar. Toca SUPERPODER cuando diga LISTO. El aro luminoso muestra cuál es tu robot.\n\n" +
+		"4  ¡JUEGA!\nLos robots rodean, amagan, esquivan, cargan y se separan después de atacar. Los críticos pueden lanzar una pieza mecánica con muchas chispas. Toca SUPERPODER cuando diga LISTO. El aro luminoso muestra cuál es tu robot.\n\n" +
 		"SI NO GANAS\nNo pasa nada. Toca AYÚDAME A ELEGIR y el juego recomendará el robot más conveniente.\n\n" +
-		"MÁS OPCIONES\nTaller avanzado permite construir pieza por pieza. También hay dos jugadores y modo Wi-Fi. Todos los modos de esta edición usan destellos de colores y conservan sus piezas.",
+		"MÁS OPCIONES\nTaller avanzado permite construir pieza por pieza. También hay dos jugadores y modo Wi-Fi. Todos los modos usan la misma IA, críticos arcade y desarmes mecánicos.",
 		18,
 		INK
 	)
@@ -2018,7 +2064,7 @@ func _run_smoke_test() -> void:
 	passed = passed and model_test.expression_id == 7 and model_test.get_node_or_null("head/ExpressionFace") != null
 	model_test.set_damage_state(3)
 	passed = passed and model_test.has_node("MechanicalDamage")
-	passed = passed and audio.streams.has("battle_music") and audio.streams.size() >= 12
+	passed = passed and audio.streams.has("battle_music") and audio.streams.has("critical") and audio.streams.size() >= 16
 	var fighter_test_a := FighterScript.new()
 	var fighter_test_b := FighterScript.new()
 	add_child(fighter_test_a)
@@ -2039,12 +2085,12 @@ func _run_smoke_test() -> void:
 	fighter_test_b.take_damage(50.0, fighter_test_a.global_position, false)
 	passed = passed and fighter_test_b.hp < hp_before
 	var parts_before: int = fighter_test_b.model.part_roots.size()
-	fighter_test_b.take_tool_hit(200.0, fighter_test_a.global_position, 2, true)
-	passed = passed and fighter_test_b.model.part_roots.size() == parts_before
+	fighter_test_b.take_arcade_critical(50.0, fighter_test_a.global_position, 2, true)
+	passed = passed and fighter_test_b.model.part_roots.size() < parts_before
 	passed = passed and KIDS_PRESETS.size() == 4 and KIDS_ROBOT_NAMES.size() == 4
 	var preview_prediction := _kids_prediction_for(maximum_build, Catalog.empty_build())
 	passed = passed and float(preview_prediction.player) > 0.0 and float(preview_prediction.cpu) > 0.0
 	passed = passed and EXPRESSION_LABELS.size() == 8
 	passed = passed and fighter_test_a._can_attack_at_distance(2.0)
-	print("FORJA_KIDS_SMOKE_TEST:", "PASS" if passed else "FAIL", " expressions=8 invisible_touch=OK combat_tactics=6 aura=OK pieces_safe=OK LAN=4")
+	print("FORJA_KIDS_SMOKE_TEST:", "PASS" if passed else "FAIL", " expressions=8 criticals=OK detachable_parts=OK combat_tactics=6 aura=OK LAN=4")
 	get_tree().quit(0 if passed else 1)
